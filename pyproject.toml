@@ -1,13 +1,16 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
 
 [project]
 name = "detectability"
 dynamic = ["version"]
-description = ''
+description = 'Radar detectability product'
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 license = "MIT"
 keywords = []
 authors = [
@@ -16,23 +19,11 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = []
-
-[project.urls]
-Documentation = "https://github.com/Jussi Tiira/detectability#readme"
-Issues = "https://github.com/Jussi Tiira/detectability/issues"
-Source = "https://github.com/Jussi Tiira/detectability"
-
-[tool.hatch.version]
-path = "src/detectability/__about__.py"
 
 [tool.hatch.envs.types]
 extra-dependencies = [
@@ -45,9 +36,6 @@ check = "mypy --install-types --non-interactive {args:src/detectability tests}"
 source_pkgs = ["detectability", "tests"]
 branch = true
 parallel = true
-omit = [
-  "src/detectability/__about__.py",
-]
 
 [tool.coverage.paths]
 detectability = ["src/detectability", "*/detectability/src/detectability"]
