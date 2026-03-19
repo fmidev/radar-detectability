@@ -23,7 +23,21 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = []
+dependencies = [
+  "numpy",
+  "scipy",
+  "xarray",
+  "xradar",
+  "wradlib",
+  "rioxarray",
+]
+
+[tool.hatch.envs.test]
+extra-dependencies = [
+  "pytest",
+]
+[tool.hatch.envs.test.scripts]
+run = "pytest {args:tests}"
 
 [tool.hatch.envs.types]
 extra-dependencies = [
