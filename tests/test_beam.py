@@ -6,66 +6,22 @@
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose
+from wradlib.georef import bin_altitude
 
-from detectability.beam import beam_height, ground_distance, slant_range_from_height
+from detectability.beam import slant_range_from_height
 
 # Vimpeli radar site altitude
 SITEALT = 200.0
-
-
-class TestBeamHeight:
-    """Tests for beam_height (wradlib.georef.bin_altitude wrapper)."""
-
-    def test_zero_range_returns_sitealt(self) -> None:
-        assert beam_height(0.0, 0.3, SITEALT) == pytest.approx(SITEALT)
-
-    def test_known_value_low_elevation(self) -> None:
-        # 100 km slant range, 0.3° elevation, 200 m site
-        h = beam_height(100_000.0, 0.3, SITEALT)
-        # Expected ~1312 m (verified against legacy C and wradlib)
-        assert h == pytest.approx(1312, abs=5)
-
-    def test_higher_elevation_gives_higher_beam(self) -> None:
-        h_low = beam_height(100_000.0, 0.3, SITEALT)
-        h_high = beam_height(100_000.0, 5.0, SITEALT)
-        assert h_high > h_low
-
-    def test_vectorized(self) -> None:
-        ranges = np.array([50_000.0, 100_000.0, 200_000.0])
-        h = beam_height(ranges, 0.3, SITEALT)
-        assert h.shape == (3,)
-        # Heights should increase with range
-        assert np.all(np.diff(h) > 0)
-
-    def test_broadcasting(self) -> None:
-        ranges = np.array([50_000.0, 100_000.0, 150_000.0])
-        elevations = np.array([0.3, 1.5, 5.0])
-        h = beam_height(ranges[:, None], elevations[None, :], SITEALT)
-        assert h.shape == (3, 3)
-
-
-class TestGroundDistance:
-    """Tests for ground_distance (wradlib.georef.bin_distance wrapper)."""
-
-    def test_zero_range(self) -> None:
-        d = ground_distance(0.0, 0.3, SITEALT)
-        assert d == pytest.approx(0.0, abs=1)
-
-    def test_ground_distance_less_than_slant_range(self) -> None:
-        r = 100_000.0
-        d = ground_distance(r, 5.0, SITEALT)
-        assert d < r
 
 
 class TestSlantRangeFromHeight:
     """Tests for the analytical inverse: height → slant range."""
 
     def test_roundtrip_single(self) -> None:
-        """beam_height → slant_range_from_height recovers original range."""
+        """bin_altitude → slant_range_from_height recovers original range."""
         r_orig = 100_000.0
         elev = 0.3
-        h = beam_height(r_orig, elev, SITEALT)
+        h = bin_altitude(r_orig, elev, SITEALT)
         r_back = slant_range_from_height(h, elev, SITEALT)
         assert r_back == pytest.approx(r_orig, abs=3)
 
@@ -73,7 +29,7 @@ class TestSlantRangeFromHeight:
     @pytest.mark.parametrize("elev", [0.3, 0.7, 1.5, 5.0, 9.0])
     def test_roundtrip_parametrized(self, r_km: int, elev: float) -> None:
         r_m = r_km * 1000.0
-        h = beam_height(r_m, elev, SITEALT)
+        h = bin_altitude(r_m, elev, SITEALT)
         r_back = slant_range_from_height(h, elev, SITEALT)
         assert r_back == pytest.approx(r_m, abs=3)
 

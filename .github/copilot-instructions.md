@@ -62,4 +62,4 @@ The legacy C programs (`legacy/src/`) are the authoritative reference for algori
 
 ## Testing
 
-Tests live in `tests/`. Use the agent hooks to run tests.
+Tests live in `tests/`. Prefer agent hooks to run tests over running them on the command line.
