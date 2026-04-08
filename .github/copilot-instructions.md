@@ -2,8 +2,7 @@
 
 Python package for computing radar detectability (beam overshooting/filling) products. This is a modern Python reimplementation/replacement of the C/shell legacy implementation in `legacy/`. To be used in Apache Airflow pipelines for operational radar data processing at the Finnish Meteorological Institute (FMI).
 
-**Core values**: Modern tools and standards, code readability and maintainability, reuse over reimplementation. Where applicable, leverage `scipy`, `xarray`, `wradlib`, and other established libraries for mathematical and radar-specific operations instead of reimplementing algorithms. **Do it the pythonic way.** This is not strictly a rewrite
-project, but rather a replacement with comparable functionality and results.
+**Core values**: Modern tools and standards, code readability and maintainability, reuse over reimplementation. Where applicable, leverage `scipy`, `xarray`, `wradlib`, and other established libraries for mathematical and radar-specific operations instead of reimplementing algorithms. **Do it the pythonic way.** This is not strictly a rewrite project, but rather a replacement with comparable functionality and results.
 
 ## Project layout
 
