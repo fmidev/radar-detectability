@@ -29,7 +29,7 @@ This package is deployed as a containerized service in FMI's Airflow radar produ
 
 ## Conventions
 
-- **Python ≥ 3.12** — use modern syntax freely (e.g. `match`, `type` aliases, `X | Y` unions).
+- **Python ≥ 3.14** — use modern syntax freely (e.g. `match`, `type` aliases, `X | Y` unions).
 - **src layout** — package root is `src/detectability/`, not the repo root.
 - **SPDX headers** — every new source file must start with:
   ```python
