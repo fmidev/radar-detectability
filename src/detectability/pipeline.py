@@ -16,8 +16,10 @@ from detectability.detection import compute_detection_ranges
 from detectability.filtering import azimuthal_filter
 from detectability.georef import polar_to_projected, write_cog
 from detectability.io import read_echotop
+from detectability.logs import streamlogger_setup
 
 logger = logging.getLogger(__name__)
+streamlogger_setup(logger)
 
 
 def process(
