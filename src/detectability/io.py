@@ -38,7 +38,7 @@ def read_echotop(path: str | Path) -> xr.Dataset:
     xarray.Dataset
         xradar sweep Dataset (``sweep_0``), with ``HGHT`` [m] on
         (azimuth, range) dims.  Radar site coordinates (``longitude``,
-        ``latitude``, ``altitude``) are xradar-native sweep coordinates.
+        ``latitude``, ``altitude``) are attached as scalar sweep coordinates.
         If the file's ``/how`` group contains ``beamwH`` / ``beamwV``,
         they are added as ``beamwidth_h`` / ``beamwidth_v`` attrs [deg].
 
@@ -57,6 +57,10 @@ def read_echotop(path: str | Path) -> xr.Dataset:
             f"HGHT quantity not found in {path.name}; "
             f"available variables: {list(ds.data_vars)}"
         )
+
+    for coord in ("longitude", "latitude", "altitude"):
+        if coord not in ds.coords and coord in dt.ds.coords:
+            ds = ds.assign_coords({coord: dt.ds.coords[coord]})
 
     how_attrs = _read_how_attrs(path)
     if how_attrs:

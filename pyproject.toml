@@ -27,7 +27,7 @@ dependencies = [
   "numpy",
   "scipy",
   "xarray",
-  "xradar",
+  "xradar>=0.12.0",
   "wradlib",
   "rioxarray",
 ]
