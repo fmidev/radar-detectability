@@ -233,3 +233,64 @@ class TestSectorSmooth:
         weight = rng.uniform(0, 1, NRAYS)
         out = sector_smooth(top, weight)
         assert (out >= 0).all()
+
+
+# ---------------------------------------------------------------------------
+# Tests for sector_smooth with background blending
+# ---------------------------------------------------------------------------
+
+
+class TestSectorSmoothBlending:
+    def test_no_background_zero_weight_contributes_nothing(self) -> None:
+        """Without background_top_m, weight=0 rays contribute 0."""
+        top = np.zeros(NRAYS)
+        weight = np.zeros(NRAYS)
+        out = sector_smooth(top, weight)
+        assert (out == 0).all()
+
+    def test_with_background_zero_weight_uses_background(self) -> None:
+        """With background_top_m, weight=0 rays contribute background value."""
+        top = np.zeros(NRAYS)
+        weight = np.zeros(NRAYS)
+        out = sector_smooth(top, weight, background_top_m=5000.0)
+        # All rays have weight=0, so Rayval = (1-0)*5000 = 5000 for each
+        assert_allclose(out, 5000.0, rtol=1e-10)
+
+    def test_with_background_full_weight_ignores_background(self) -> None:
+        """With weight=1 everywhere, background has no effect."""
+        top = np.full(NRAYS, 4000.0)
+        weight = np.ones(NRAYS)
+        out = sector_smooth(top, weight, background_top_m=8000.0)
+        # Rayval = 1.0*4000 + 0.0*8000 = 4000
+        assert_allclose(out, 4000.0, rtol=1e-10)
+
+    def test_partial_weight_blends_correctly(self) -> None:
+        """Partial weight → blends between ray TOP and background."""
+        top = np.full(NRAYS, 6000.0)
+        weight = np.full(NRAYS, 0.5)
+        out = sector_smooth(top, weight, background_top_m=4000.0)
+        # Rayval = 0.5*6000 + 0.5*4000 = 5000
+        assert_allclose(out, 5000.0, rtol=1e-10)
+
+    def test_background_none_is_default_behavior(self) -> None:
+        """background_top_m=None behaves like original (no blending)."""
+        top = np.full(NRAYS, 3000.0)
+        weight = np.full(NRAYS, 0.5)
+        out_none = sector_smooth(top, weight, background_top_m=None)
+        # Without background: Rayval = 0.5*3000 = 1500
+        assert_allclose(out_none, 1500.0, rtol=1e-10)
+
+    def test_mixed_weights_with_background(self) -> None:
+        """Mix of weight=1 and weight=0 rays with background."""
+        top = np.zeros(NRAYS)
+        weight = np.zeros(NRAYS)
+        # One ray at centre of a small sector with full weight
+        top[180] = 8000.0
+        weight[180] = 1.0
+        out = sector_smooth(
+            top, weight, sector_half_width=5, background_top_m=4000.0
+        )
+        # Ray 180: sees itself (wt=1, rayval=8000) + 10 neighbours (wt=0, rayval=4000)
+        # Result at 180 should be between 4000 and 8000
+        assert out[180] > 4000.0
+        assert out[180] < 8000.0

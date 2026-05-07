@@ -5,7 +5,7 @@
 """Per-ray TOP picking and azimuthal sector smoothing.
 
 Implements the ray-analysis section of ``analyse_top_for_detection_range.c``,
-without background blending (deferred).
+including optional background blending for low-confidence rays.
 """
 
 import numpy as np
@@ -89,6 +89,7 @@ def sector_smooth(
     ray_weight: npt.ArrayLike,
     *,
     sector_half_width: int = 30,
+    background_top_m: float | None = None,
 ) -> np.ndarray:
     """Azimuthal sector-weighted smoothing of per-ray echo-top heights.
 
@@ -97,6 +98,11 @@ def sector_smooth(
     using a triangle (linear taper) kernel.  The contribution of each
     ray is further scaled by its ``ray_weight``, so low-confidence rays
     contribute less.
+
+    When ``background_top_m`` is provided, low-confidence rays are
+    blended toward the background value using the legacy formula::
+
+        Rayval = Wray * highTOP + (1 - Wray) * TOPprev
 
     Corresponds to the sector-weighting block in
     ``analyse_top_for_detection_range.c`` (lines ~356–408).
@@ -111,12 +117,17 @@ def sector_smooth(
         Half-width of the sector in rays.  Full sector size is
         ``2 * sector_half_width + 1``.  Legacy argument ``inW``
         (default 30, i.e. 61-ray sector for a 1°-sampled scan).
+    background_top_m
+        Background echo-top height [m] for blending with low-confidence
+        rays.  When ``None`` (default), no blending is applied and rays
+        with weight=0 contribute nothing.
 
     Returns
     -------
     numpy.ndarray, shape (nrays,)
         Smoothed echo-top height [m] per azimuth.  Rays with no valid
-        echo in the entire sector return 0.
+        echo in the entire sector return 0 (or the background value if
+        blending is active).
     """
     top = np.asarray(ray_top, dtype=np.float64)
     weight = np.asarray(ray_weight, dtype=np.float64)
@@ -137,9 +148,11 @@ def sector_smooth(
         w_ray = weight[ray_indices]
         h_ray = top[ray_indices]
         # Legacy: Rayval = Wray*highTOP + (1-Wray)*TOPprev
-        # Background blending deferred → TOPprev term omitted;
-        # rays with weight=0 contribute 0.
-        secsum = np.sum(taper * w_ray * h_ray)
+        if background_top_m is not None:
+            rayval = w_ray * h_ray + (1.0 - w_ray) * background_top_m
+        else:
+            rayval = w_ray * h_ray
+        secsum = np.sum(taper * rayval)
         # Normalise by the same Wsecsum used in the legacy code
         smoothed[A] = secsum / Wsecsum
 

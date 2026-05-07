@@ -392,3 +392,104 @@ class TestProcessRealFileProperties:
             data = src.read(1)
         assert (data > 0).any()
         assert (data == 255).any()  # some pixels fully overshooting
+
+
+# ---------------------------------------------------------------------------
+# Integration: stateful pipeline with background TOP
+# ---------------------------------------------------------------------------
+
+
+class TestProcessWithState:
+    """Pipeline with state_path for background TOP persistence."""
+
+    def test_first_run_creates_state_file(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        """First run (no existing state) creates a new state file."""
+        out = tmp_path / "out.tif"
+        state = tmp_path / "state.json"
+        process(
+            synthetic_echotop, out, lowest_elevation=0.3, state_path=state
+        )
+        assert state.exists()
+
+    def test_state_contains_valid_json(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        import json
+
+        state = tmp_path / "state.json"
+        process(
+            synthetic_echotop,
+            tmp_path / "out.tif",
+            lowest_elevation=0.3,
+            state_path=state,
+        )
+        data = json.loads(state.read_text(encoding="utf-8"))
+        assert "top_km" in data
+        assert "timestamp" in data
+        assert data["top_km"] > 0
+
+    def test_second_run_uses_state(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Second run loads state and produces output without error."""
+        state = tmp_path / "state.json"
+        out1 = tmp_path / "out1.tif"
+        out2 = tmp_path / "out2.tif"
+        process(
+            synthetic_echotop, out1, lowest_elevation=0.3, state_path=state
+        )
+        process(
+            synthetic_echotop, out2, lowest_elevation=0.3, state_path=state
+        )
+        assert out2.exists()
+
+    def test_clear_sky_does_not_update_state(
+        self, clear_sky_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Clear sky (no valid rays) → state file not created."""
+        state = tmp_path / "state.json"
+        process(
+            clear_sky_echotop,
+            tmp_path / "out.tif",
+            lowest_elevation=0.3,
+            state_path=state,
+        )
+        # No valid rays → threshold not met → no state written
+        assert not state.exists()
+
+    def test_clear_sky_with_existing_state_uses_background(
+        self, clear_sky_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Clear sky + existing state → blending produces non-trivial output."""
+        import json
+        from datetime import UTC, datetime
+
+        state = tmp_path / "state.json"
+        # Pre-seed state with a recent 5 km background
+        state.write_text(
+            json.dumps({
+                "top_km": 5.0,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }),
+            encoding="utf-8",
+        )
+        out = tmp_path / "out.tif"
+        process(
+            clear_sky_echotop, out, lowest_elevation=0.3, state_path=state
+        )
+        with rasterio.open(str(out)) as src:
+            data = src.read(1)
+        # With background blending, should have a transition zone
+        assert (data > 0).any()
+        assert (data < 255).any()
+
+    def test_without_state_path_no_state_file(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Without state_path, no state file is created anywhere."""
+        out = tmp_path / "out.tif"
+        process(synthetic_echotop, out, lowest_elevation=0.3)
+        # No JSON files created in tmp_path
+        assert list(tmp_path.glob("*.json")) == []

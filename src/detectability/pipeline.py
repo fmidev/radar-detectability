@@ -9,6 +9,7 @@ georeferencing into a single callable entry point.
 """
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from detectability.analysis import pick_ray_tops, sector_smooth
@@ -17,6 +18,13 @@ from detectability.filtering import azimuthal_filter
 from detectability.georef import polar_to_projected, write_cog
 from detectability.io import read_echotop
 from detectability.logs import streamlogger_setup
+from detectability.state import (
+    BackgroundState,
+    age_background_top,
+    compute_new_top,
+    load_state,
+    save_state,
+)
 
 logger = logging.getLogger(__name__)
 streamlogger_setup(logger)
@@ -33,6 +41,7 @@ def process(
     range_resolution: float = 500.0,
     sector_half_width: int = 30,
     crs: str = "EPSG:3067",
+    state_path: str | Path | None = None,
 ) -> None:
     """Run the full detectability product pipeline.
 
@@ -63,6 +72,13 @@ def process(
         gives a 61-ray sector for 1° azimuthal sampling.
     crs
         Target CRS for the output COG (default ``EPSG:3067``).
+    state_path
+        Path to a JSON file for persisting background echo-top state
+        between runs.  When provided, enables background blending for
+        low-confidence rays and time-based aging toward climatology.
+        The file is created on first run and updated when sufficient
+        valid rays are present.  When ``None`` (default), no background
+        blending is applied.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -103,11 +119,26 @@ def process(
         max_range_bin=max_bin,
     )
 
+    # --- Background state ---------------------------------------------------
+    background_top_m: float | None = None
+    if state_path is not None:
+        state = load_state(state_path)
+        if state is not None:
+            now = datetime.now(UTC)
+            effective_top_km = age_background_top(state, now)
+            background_top_m = effective_top_km * 1000.0
+            logger.info(
+                "Background TOP: %.1f km (aged from %.1f km)",
+                effective_top_km,
+                state.top_km,
+            )
+
     # --- Sector smoothing ---------------------------------------------------
     smoothed_top = sector_smooth(
         ray_top,
         ray_weight,
         sector_half_width=sector_half_width,
+        background_top_m=background_top_m,
     )
 
     # --- Detection range computation ----------------------------------------
@@ -130,4 +161,19 @@ def process(
     )
 
     write_cog(da_proj, output_path)
+
+    # --- State update -------------------------------------------------------
+    if state_path is not None:
+        new_top_km = compute_new_top(ray_top, ray_weight)
+        if new_top_km is not None:
+            new_state = BackgroundState(
+                top_km=new_top_km, timestamp=datetime.now(UTC)
+            )
+            save_state(state_path, new_state)
+            logger.info("Updated background state: %.1f km", new_top_km)
+        else:
+            logger.info(
+                "Insufficient valid rays; background state not updated"
+            )
+
     logger.info("Done: %s", output_path)
