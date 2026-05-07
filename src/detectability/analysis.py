@@ -11,14 +11,16 @@ including optional background blending for low-confidence rays.
 import numpy as np
 import numpy.typing as npt
 
+from detectability.defaults import HIGHPART, SAMPLEPOINT, SECTOR_HALF_WIDTH
+
 
 def pick_ray_tops(
     top_2d: npt.ArrayLike,
     *,
     min_range_bin: int = 20,
     max_range_bin: int = 480,
-    highpart: float = 0.1,
-    samplepoint: float = 0.5,
+    highpart: float = HIGHPART,
+    samplepoint: float = SAMPLEPOINT,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Pick a representative echo-top height and confidence weight per ray.
 
@@ -88,7 +90,7 @@ def sector_smooth(
     ray_top: npt.ArrayLike,
     ray_weight: npt.ArrayLike,
     *,
-    sector_half_width: int = 30,
+    sector_half_width: int = SECTOR_HALF_WIDTH,
     background_top_m: float | None = None,
 ) -> np.ndarray:
     """Azimuthal sector-weighted smoothing of per-ray echo-top heights.

@@ -13,6 +13,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from detectability.analysis import pick_ray_tops, sector_smooth
+from detectability.defaults import (
+    CLIMATOLOGY_TOP_KM,
+    HIGHPART,
+    MAX_RANGE_KM,
+    MIN_RANGE_KM,
+    RANGE_RESOLUTION,
+    SAMPLEPOINT,
+    SECTOR_HALF_WIDTH,
+)
 from detectability.detection import compute_detection_ranges
 from detectability.filtering import azimuthal_filter
 from detectability.georef import polar_to_projected, write_cog
@@ -36,10 +45,13 @@ def process(
     *,
     lowest_elevation: float,
     beamwidth: float | None = None,
-    min_range_km: float = 10.0,
-    max_range_km: float = 240.0,
-    range_resolution: float = 500.0,
-    sector_half_width: int = 30,
+    min_range_km: float = MIN_RANGE_KM,
+    max_range_km: float = MAX_RANGE_KM,
+    range_resolution: float = RANGE_RESOLUTION,
+    sector_half_width: int = SECTOR_HALF_WIDTH,
+    highpart: float = HIGHPART,
+    samplepoint: float = SAMPLEPOINT,
+    climatology_top_km: float = CLIMATOLOGY_TOP_KM,
     crs: str = "EPSG:3067",
     state_path: str | Path | None = None,
 ) -> None:
@@ -70,6 +82,17 @@ def process(
         Half-width of the azimuthal smoothing sector in rays.  Full
         sector size is ``2 * sector_half_width + 1`` rays.  Default 30
         gives a 61-ray sector for 1° azimuthal sampling.
+    highpart
+        Fraction of sorted range bins (highest first) to consider per
+        ray.  Default 0.1 = top 10%.  Lower values focus on the very
+        highest echoes.  Legacy name: ``HIGHPART`` / ``sortage``.
+    samplepoint
+        Quantile position within valid sorted bins to pick as ray TOP.
+        0.0 = maximum, 0.5 = median.  Noisier radars may use ~0.15.
+        Legacy name: ``SAMPLEPOINT``.
+    climatology_top_km
+        Climatological echo-top height [km] used as the aging target
+        when no valid echoes are observed.  Default 5.5 km.
     crs
         Target CRS for the output COG (default ``EPSG:3067``).
     state_path
@@ -117,6 +140,8 @@ def process(
         filtered,
         min_range_bin=min_bin,
         max_range_bin=max_bin,
+        highpart=highpart,
+        samplepoint=samplepoint,
     )
 
     # --- Background state ---------------------------------------------------
@@ -125,7 +150,9 @@ def process(
         state = load_state(state_path)
         if state is not None:
             now = datetime.now(UTC)
-            effective_top_km = age_background_top(state, now)
+            effective_top_km = age_background_top(
+                state, now, climatology_km=climatology_top_km
+            )
             background_top_m = effective_top_km * 1000.0
             logger.info(
                 "Background TOP: %.1f km (aged from %.1f km)",

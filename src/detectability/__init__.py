@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from detectability import defaults
 from detectability.pipeline import process
 
-__all__ = ["process"]
+__all__ = ["defaults", "process"]

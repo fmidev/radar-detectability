@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from detectability.defaults import CLIMATOLOGY_TOP_KM
 from detectability.state import (
-    CLIMATOLOGY_TOP_KM,
     BackgroundState,
     age_background_top,
     compute_new_top,

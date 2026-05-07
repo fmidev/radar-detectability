@@ -23,10 +23,9 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-logger = logging.getLogger(__name__)
+from detectability.defaults import CLIMATOLOGY_TOP_KM, GRACE_HOURS, MAX_AGE_HOURS
 
-#: Default climatological echo-top height [km] (legacy value).
-CLIMATOLOGY_TOP_KM: float = 5.5
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -95,8 +94,8 @@ def age_background_top(
     now: datetime,
     *,
     climatology_km: float = CLIMATOLOGY_TOP_KM,
-    max_age_hours: float = 48.0,
-    grace_hours: float = 2.25,
+    max_age_hours: float = MAX_AGE_HOURS,
+    grace_hours: float = GRACE_HOURS,
 ) -> float:
     """Apply time-based aging of background TOP toward climatology.
 
