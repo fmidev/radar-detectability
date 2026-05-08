@@ -28,6 +28,7 @@ def polar_to_projected(
     radar_alt: float = 0.0,
     crs: str = "EPSG:3067",
     resolution_m: float = 500.0,
+    max_range_m: float | None = None,
 ) -> xr.DataArray:
     """Reproject polar detectability field to a regular projected grid.
 
@@ -47,12 +48,17 @@ def polar_to_projected(
         Target CRS (default EPSG:3067).
     resolution_m
         Target grid cell size [m].
+    max_range_m
+        Maximum radar range [m].  Pixels beyond this distance from the
+        radar site are masked to nodata (255).  When ``None``, no
+        masking is applied.
 
     Returns
     -------
     xarray.DataArray
         Projected detectability grid (y × x) with CRS attached via
-        rioxarray. Values are uint8, 0–255.
+        rioxarray. Values are uint8, 0–255.  Nodata is 255 when
+        ``max_range_m`` is provided.
     """
     import rioxarray  # noqa: F401 — registers .rio accessor
 
@@ -104,6 +110,21 @@ def polar_to_projected(
     )
     da = da.rio.write_crs(crs)
     da = da.rio.write_transform()
+
+    if max_range_m is not None:
+        # Compute radar centre in projected coordinates
+        from pyproj import Transformer
+
+        transformer = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+        cx, cy = transformer.transform(radar_lon, radar_lat)
+        # Distance from radar centre for each grid cell
+        xs = da.coords["x"].values
+        ys = da.coords["y"].values
+        gx, gy = np.meshgrid(xs, ys)
+        dist = np.sqrt((gx - cx) ** 2 + (gy - cy) ** 2)
+        da.values[dist > max_range_m] = 255
+        da = da.rio.write_nodata(255)
+
     return da
 
 

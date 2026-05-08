@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from detectability import defaults
+from detectability.composite import composite_min
 from detectability.pipeline import process
 
-__all__ = ["defaults", "process"]
+__all__ = ["composite_min", "defaults", "process"]

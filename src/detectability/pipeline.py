@@ -185,6 +185,7 @@ def process(
         radar_lat=radar_lat,
         radar_alt=radar_alt,
         crs=crs,
+        max_range_m=nbins * range_resolution,
     )
 
     write_cog(da_proj, output_path)

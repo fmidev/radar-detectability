@@ -110,3 +110,20 @@ MAX_RANGE_KM: float = 240.0
 
 RANGE_RESOLUTION: float = 500.0
 """Range bin size [m] of the output detectability grid."""
+
+# ---------------------------------------------------------------------------
+# Compositing
+# ---------------------------------------------------------------------------
+
+COMPOSITE_BOUNDS_EPSG3067: tuple[float, float, float, float] = (
+    -53000.0,
+    6500000.0,
+    849500.0,
+    7904500.0,
+)
+"""Fixed national grid bounds (xmin, ymin, xmax, ymax) in EPSG:3067 [m].
+
+Covers the full Finnish weather radar network with ~240 km buffer on
+all sides to include coverage from the outermost radars (Korppoo SW,
+Utsjoki NE).  Aligned to the 500 m grid resolution.
+"""

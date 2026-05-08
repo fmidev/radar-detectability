@@ -255,3 +255,79 @@ class TestWriteCog:
             write_cog(da, path)
             with rasterio.open(path) as src:
                 assert src.dtypes[0] == "uint8"
+
+
+class TestNodataMask:
+    """Tests for max_range_m nodata masking."""
+
+    def test_nodata_set_when_max_range_provided(self) -> None:
+        ds = _make_detection_ds(nbins=50)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+            max_range_m=50 * 500.0,
+        )
+        assert da.rio.nodata == 255
+
+    def test_no_nodata_without_max_range(self) -> None:
+        ds = _make_detection_ds(nbins=50)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+        )
+        assert da.rio.nodata is None
+
+    def test_corners_masked_to_255(self) -> None:
+        """Corners of the rectangular grid should be beyond circular range."""
+        nbins = 50
+        max_range_m = nbins * 500.0
+        ds = _make_detection_ds(nbins=nbins)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+            max_range_m=max_range_m,
+        )
+        # Corners of the array should be nodata (255) since they are
+        # farther from radar centre than max_range
+        assert da.values[0, 0] == 255
+        assert da.values[0, -1] == 255
+        assert da.values[-1, 0] == 255
+        assert da.values[-1, -1] == 255
+
+    def test_centre_not_masked(self) -> None:
+        """Centre of the grid (near radar) should not be masked."""
+        nbins = 50
+        max_range_m = nbins * 500.0
+        ds = _make_detection_ds(nbins=nbins, top_m=3000.0)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+            max_range_m=max_range_m,
+        )
+        ny, nx = da.shape
+        # Centre pixel should not be nodata
+        assert da.values[ny // 2, nx // 2] != 255
+
+    def test_cog_preserves_nodata(self) -> None:
+        """Written COG should have nodata=255 in metadata."""
+        ds = _make_detection_ds(nbins=50)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+            max_range_m=50 * 500.0,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.tif"
+            write_cog(da, path)
+            with rasterio.open(path) as src:
+                assert src.nodata == 255
