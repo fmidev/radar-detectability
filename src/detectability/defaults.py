@@ -116,14 +116,10 @@ RANGE_RESOLUTION: float = 500.0
 # ---------------------------------------------------------------------------
 
 COMPOSITE_BOUNDS_EPSG3067: tuple[float, float, float, float] = (
-    -53000.0,
-    6500000.0,
-    849500.0,
-    7904500.0,
+    -208000,
+    6390000,
+    1072000,
+    7926000,
 )
-"""Fixed national grid bounds (xmin, ymin, xmax, ymax) in EPSG:3067 [m].
-
-Covers the full Finnish weather radar network with ~240 km buffer on
-all sides to include coverage from the outermost radars (Korppoo SW,
-Utsjoki NE).  Aligned to the 500 m grid resolution.
+"""Finrad grid bounds (xmin, ymin, xmax, ymax) in EPSG:3067 [m].
 """
