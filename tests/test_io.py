@@ -5,6 +5,7 @@
 """Tests for echotop I/O (detectability.io)."""
 
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import h5py
@@ -142,6 +143,10 @@ class TestReadEchotopReal:
         assert ds.attrs["beamwidth_h"] == pytest.approx(0.97, abs=0.01)
         assert ds.attrs["beamwidth_v"] == pytest.approx(0.88, abs=0.01)
 
+    def test_nominal_time(self) -> None:
+        ds = read_echotop(REAL_ECHOTOP)
+        assert ds.attrs["nominal_time"] == datetime(2026, 3, 19, 11, 20, tzinfo=UTC)
+
 
 # ---------------------------------------------------------------------------
 # Tests with synthetic ODIM fixture
@@ -193,3 +198,19 @@ class TestReadEchotopSynthetic:
         assert "beamwidth_h" not in ds.attrs
         assert "beamwidth_v" not in ds.attrs
         assert ds["HGHT"].shape == (36, 50)
+
+    def test_nominal_time_from_what(self, synthetic_echotop: Path) -> None:
+        ds = read_echotop(synthetic_echotop)
+        assert ds.attrs["nominal_time"] == datetime(2026, 3, 19, 12, 0, tzinfo=UTC)
+
+    def test_malformed_nominal_time_omitted(
+        self, tmp_path: Path, synthetic_echotop: Path
+    ) -> None:
+        import shutil
+
+        bad = tmp_path / "bad_time.h5"
+        shutil.copy(synthetic_echotop, bad)
+        with h5py.File(bad, "a") as f:
+            f["what"].attrs["time"] = np.bytes_("99")
+        ds = read_echotop(bad)
+        assert "nominal_time" not in ds.attrs

@@ -4,11 +4,13 @@
 
 """Read pre-computed polar echotop products in ODIM HDF5 format.
 
-Uses xradar for reading; h5py is used only to extract instrument
-metadata (beamwidth) that xradar does not expose.
+Uses xradar for reading; h5py is used only to extract metadata
+(nominal time, beamwidth) that xradar does not expose.
 """
 
 import logging
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 import h5py
@@ -24,8 +26,8 @@ _HGHT_QUANTITY = "HGHT"
 def read_echotop(path: str | Path) -> xr.Dataset:
     """Read a pre-computed polar echotop product (ODIM HDF5).
 
-    Returns the xradar sweep Dataset as-is, augmented with instrument
-    metadata from the ODIM ``/how`` group that xradar does not expose.
+    Returns the xradar sweep Dataset as-is, augmented with metadata from
+    the ODIM ``/what`` and ``/how`` groups that xradar does not expose.
 
     Parameters
     ----------
@@ -41,6 +43,8 @@ def read_echotop(path: str | Path) -> xr.Dataset:
         ``latitude``, ``altitude``) are attached as scalar sweep coordinates.
         If the file's ``/how`` group contains ``beamwH`` / ``beamwV``,
         they are added as ``beamwidth_h`` / ``beamwidth_v`` attrs [deg].
+        The ODIM nominal time (``/what`` ``date`` + ``time``) is added as
+        a timezone-aware UTC ``datetime`` attr ``nominal_time``, if present.
 
     Notes
     -----
@@ -62,9 +66,9 @@ def read_echotop(path: str | Path) -> xr.Dataset:
         if coord not in ds.coords and coord in dt.ds.coords:
             ds = ds.assign_coords({coord: dt.ds.coords[coord]})
 
-    how_attrs = _read_how_attrs(path)
-    if how_attrs:
-        ds = ds.assign_attrs(how_attrs)
+    extra_attrs = _read_odim_attrs(path)
+    if extra_attrs:
+        ds = ds.assign_attrs(extra_attrs)
 
     logger.debug(
         "Read echotop %s: %dx%d, site (%.4fE, %.4fN, %.0f m)",
@@ -78,25 +82,52 @@ def read_echotop(path: str | Path) -> xr.Dataset:
     return ds
 
 
-def _read_how_attrs(path: Path) -> dict[str, float]:
-    """Extract instrument metadata from the ODIM ``/how`` group.
+def _read_odim_attrs(path: Path) -> dict[str, float | datetime]:
+    """Extract metadata from the ODIM ``/what`` and ``/how`` groups.
 
-    Returns a dict that may contain ``beamwidth_h`` and ``beamwidth_v``
-    (degrees).  Missing attributes are silently omitted.
+    Returns a dict that may contain ``nominal_time`` (UTC datetime) and
+    ``beamwidth_h`` / ``beamwidth_v`` (degrees).  Missing or malformed
+    attributes are omitted.
     """
-    result: dict[str, float] = {}
+    result: dict[str, float | datetime] = {}
     try:
         with h5py.File(path, "r") as f:
+            what = f.get("what")
+            if what is not None:
+                nominal_time = _parse_nominal_time(
+                    what.attrs.get("date"), what.attrs.get("time")
+                )
+                if nominal_time is not None:
+                    result["nominal_time"] = nominal_time
             how = f.get("how")
-            if how is None:
-                return result
-            for odim_key, our_key in (
-                ("beamwH", "beamwidth_h"),
-                ("beamwV", "beamwidth_v"),
-            ):
-                val = how.attrs.get(odim_key)
-                if val is not None:
-                    result[our_key] = float(val)
+            if how is not None:
+                for odim_key, our_key in (
+                    ("beamwH", "beamwidth_h"),
+                    ("beamwV", "beamwidth_v"),
+                ):
+                    val = how.attrs.get(odim_key)
+                    if val is not None:
+                        result[our_key] = float(val)
     except OSError:
-        logger.warning("Could not read /how attrs from %s", path)
+        logger.warning("Could not read /what and /how attrs from %s", path)
     return result
+
+
+def _parse_nominal_time(date: object, time: object) -> datetime | None:
+    """Parse ODIM ``YYYYMMDD`` + ``HHmmss`` attributes into a UTC datetime."""
+    if date is None or time is None:
+        return None
+    date_str, time_str = (
+        v.decode(errors="replace") if isinstance(v, bytes) else str(v)
+        for v in (date, time)
+    )
+    # Check the format strictly: strptime accepts e.g. "20260319" + "99"
+    if re.fullmatch(r"\d{8}", date_str) and re.fullmatch(r"\d{6}", time_str):
+        try:
+            return datetime.strptime(date_str + time_str, "%Y%m%d%H%M%S").replace(
+                tzinfo=UTC
+            )
+        except ValueError:
+            pass
+    logger.warning("Malformed ODIM nominal time: date=%r time=%r", date, time)
+    return None
