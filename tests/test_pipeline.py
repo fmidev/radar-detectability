@@ -4,6 +4,8 @@
 
 """Tests for the top-level processing pipeline (detectability.pipeline)."""
 
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +16,7 @@ import rasterio
 import xarray as xr
 
 import detectability
+from detectability.defaults import CLIMATOLOGY_TOP_KM
 from detectability.pipeline import process
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -327,7 +330,7 @@ class TestProcessSynthetic:
 
 
 class TestProcessClearSky:
-    """Pipeline with no echo → all detectability 0 (full overshooting at range 0)."""
+    """Pipeline with no echo → detectability from climatological background."""
 
     def test_output_created(
         self, clear_sky_echotop: Path, tmp_path: Path
@@ -336,18 +339,21 @@ class TestProcessClearSky:
         process(clear_sky_echotop, out, lowest_elevation=0.3)
         assert out.exists()
 
-    def test_all_zero_or_max(
+    def test_climatology_gives_transition_zone(
         self, clear_sky_echotop: Path, tmp_path: Path
     ) -> None:
-        """No echo → smoothed TOP = 0 → all pixels either 0 or 255."""
+        """No echo, no state → climatological TOP, not total overshooting."""
         out = tmp_path / "out.tif"
         process(clear_sky_echotop, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
             data = src.read(1)
-        # With zero TOP: range_full = range_zero = 0 → frac = r/1 clipped
-        # All bins are at or beyond the "zero" range → 255 or 0
-        unique = set(np.unique(data))
-        assert unique <= {0, 255}
+            tags = src.tags()
+        assert (data == 0).any()
+        assert ((data > 0) & (data < 255)).any()
+        assert tags["background_source"] == "climatology"
+        assert float(tags["background_top_km"]) == CLIMATOLOGY_TOP_KM
+        assert float(tags["echo_coverage"]) == 0.0
+        assert "background_age_hours" not in tags
 
 
 # ---------------------------------------------------------------------------
@@ -463,16 +469,10 @@ class TestProcessWithState:
         self, clear_sky_echotop: Path, tmp_path: Path
     ) -> None:
         """Clear sky + existing state → blending produces non-trivial output."""
-        import json
-        from datetime import UTC, datetime
-
         state = tmp_path / "state.json"
-        # Pre-seed state with a recent 5 km background
+        # Pre-seed state with a 5 km background, 1 h before the data
         state.write_text(
-            json.dumps({
-                "top_km": 5.0,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }),
+            json.dumps({"top_km": 5.0, "timestamp": "2026-03-19T11:00:00+00:00"}),
             encoding="utf-8",
         )
         out = tmp_path / "out.tif"
@@ -481,9 +481,91 @@ class TestProcessWithState:
         )
         with rasterio.open(str(out)) as src:
             data = src.read(1)
+            tags = src.tags()
         # With background blending, should have a transition zone
         assert (data > 0).any()
         assert (data < 255).any()
+        assert tags["background_source"] == "state"
+        assert float(tags["background_top_km"]) == 5.0
+        assert float(tags["background_age_hours"]) == 1.0
+
+    def test_old_state_aged_relative_to_nominal_time(
+        self, clear_sky_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Aging uses the data's nominal time, not wall-clock time."""
+        state = tmp_path / "state.json"
+        state.write_text(
+            json.dumps({"top_km": 9.0, "timestamp": "2026-03-18T12:00:00+00:00"}),
+            encoding="utf-8",
+        )
+        out = tmp_path / "out.tif"
+        process(clear_sky_echotop, out, lowest_elevation=0.3, state_path=state)
+        with rasterio.open(str(out)) as src:
+            tags = src.tags()
+        assert tags["background_source"] == "aged_state"
+        assert float(tags["background_age_hours"]) == 24.0
+        # (24 - 2.25) / 48 of the way from 9.0 toward 5.5 km
+        expected = 9.0 - (24.0 - 2.25) / 48.0 * (9.0 - 5.5)
+        assert float(tags["background_top_km"]) == pytest.approx(expected, abs=0.01)
+
+    def test_state_timestamp_is_nominal_time(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        state = tmp_path / "state.json"
+        process(
+            synthetic_echotop,
+            tmp_path / "out.tif",
+            lowest_elevation=0.3,
+            state_path=state,
+        )
+        data = json.loads(state.read_text(encoding="utf-8"))
+        assert datetime.fromisoformat(data["timestamp"]) == datetime(
+            2026, 3, 19, 12, tzinfo=UTC
+        )
+
+    def test_older_data_does_not_overwrite_newer_state(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Backfilling older data keeps the newer state intact."""
+        state = tmp_path / "state.json"
+        newer = {"top_km": 3.0, "timestamp": "2026-03-19T13:00:00+00:00"}
+        state.write_text(json.dumps(newer), encoding="utf-8")
+        process(
+            synthetic_echotop,
+            tmp_path / "out.tif",
+            lowest_elevation=0.3,
+            state_path=state,
+        )
+        assert json.loads(state.read_text(encoding="utf-8")) == newer
+
+    def test_rerun_same_time_updates_state(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Rerunning the same nominal time is allowed (idempotent retries)."""
+        state = tmp_path / "state.json"
+        state.write_text(
+            json.dumps({"top_km": 3.0, "timestamp": "2026-03-19T12:00:00+00:00"}),
+            encoding="utf-8",
+        )
+        process(
+            synthetic_echotop,
+            tmp_path / "out.tif",
+            lowest_elevation=0.3,
+            state_path=state,
+        )
+        assert json.loads(state.read_text(encoding="utf-8"))["top_km"] == 5.0
+
+    def test_provenance_tags(
+        self, synthetic_echotop: Path, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "out.tif"
+        process(synthetic_echotop, out, lowest_elevation=0.3)
+        with rasterio.open(str(out)) as src:
+            tags = src.tags()
+        assert tags["nominal_time"] == "2026-03-19T12:00:00+00:00"
+        assert tags["background_source"] == "climatology"
+        assert float(tags["echo_coverage"]) == pytest.approx(1.0)
+        assert float(tags["valid_ray_fraction"]) == pytest.approx(1.0)
 
     def test_without_state_path_no_state_file(
         self, synthetic_echotop: Path, tmp_path: Path

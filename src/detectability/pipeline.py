@@ -12,6 +12,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
+
 from detectability.analysis import pick_ray_tops, sector_smooth
 from detectability.defaults import (
     CLIMATOLOGY_TOP_KM,
@@ -21,6 +23,7 @@ from detectability.defaults import (
     RANGE_RESOLUTION,
     SAMPLEPOINT,
     SECTOR_HALF_WIDTH,
+    VALID_RAY_WEIGHT,
 )
 from detectability.detection import compute_detection_ranges
 from detectability.filtering import azimuthal_filter
@@ -28,10 +31,11 @@ from detectability.georef import polar_to_projected, write_cog
 from detectability.io import read_echotop
 from detectability.logs import streamlogger_setup
 from detectability.state import (
+    Background,
     BackgroundState,
-    age_background_top,
     compute_new_top,
     load_state,
+    resolve_background,
     save_state,
 )
 
@@ -58,7 +62,9 @@ def process(
     """Run the full detectability product pipeline.
 
     Reads a polar echotop ODIM HDF5 file, computes detectability ranges
-    and writes the result as a Cloud Optimized GeoTIFF.
+    and writes the result as a Cloud Optimized GeoTIFF.  Provenance
+    (nominal time, background TOP and its source, echo coverage) is
+    written as GeoTIFF tags.
 
     Parameters
     ----------
@@ -91,17 +97,21 @@ def process(
         0.0 = maximum, 0.5 = median.  Noisier radars may use ~0.15.
         Legacy name: ``SAMPLEPOINT``.
     climatology_top_km
-        Climatological echo-top height [km] used as the aging target
-        when no valid echoes are observed.  Default 5.5 km.
+        Climatological echo-top height [km], used as the background TOP
+        when no state is available and as the aging target when no
+        valid echoes are observed.  Default 5.5 km.
     crs
         Target CRS for the output COG (default ``EPSG:3067``).
     state_path
         Path to a JSON file for persisting background echo-top state
-        between runs.  When provided, enables background blending for
-        low-confidence rays and time-based aging toward climatology.
-        The file is created on first run and updated when sufficient
-        valid rays are present.  When ``None`` (default), no background
-        blending is applied.
+        between runs.  Low-confidence rays are always blended with a
+        background TOP; with a state file it follows the latest valid
+        observations and ages toward climatology during no-echo
+        periods.  The file is created on first run and updated when
+        sufficient valid rays are present, unless it already holds
+        state newer than the data.  Ages are measured from the ODIM
+        nominal time, so reruns and backfills are deterministic.
+        When ``None`` (default), the climatological value is used.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -120,6 +130,15 @@ def process(
             )
         beamwidth = float(ds.attrs["beamwidth_h"])
         logger.debug("Using beamwidth_h from file: %.3f°", beamwidth)
+
+    nominal_time: datetime | None = ds.attrs.get("nominal_time")
+    if nominal_time is None:
+        nominal_time = datetime.now(UTC)
+        logger.warning(
+            "Nominal time not found in %s; using current time %s",
+            input_path.name,
+            nominal_time.isoformat(),
+        )
 
     radar_lon = float(ds.coords["longitude"].values)
     radar_lat = float(ds.coords["latitude"].values)
@@ -145,27 +164,20 @@ def process(
     )
 
     # --- Background state ---------------------------------------------------
-    background_top_m: float | None = None
-    if state_path is not None:
-        state = load_state(state_path)
-        if state is not None:
-            now = datetime.now(UTC)
-            effective_top_km = age_background_top(
-                state, now, climatology_km=climatology_top_km
-            )
-            background_top_m = effective_top_km * 1000.0
-            logger.info(
-                "Background TOP: %.1f km (aged from %.1f km)",
-                effective_top_km,
-                state.top_km,
-            )
+    state = load_state(state_path) if state_path is not None else None
+    background = resolve_background(
+        state, nominal_time, climatology_km=climatology_top_km
+    )
+    logger.info(
+        "Background TOP: %.1f km (source: %s)", background.top_km, background.source
+    )
 
     # --- Sector smoothing ---------------------------------------------------
     smoothed_top = sector_smooth(
         ray_top,
         ray_weight,
         sector_half_width=sector_half_width,
-        background_top_m=background_top_m,
+        background_top_m=background.top_km * 1000.0,
     )
 
     # --- Detection range computation ----------------------------------------
@@ -177,6 +189,7 @@ def process(
         range_resolution=range_resolution,
         nbins=nbins,
     )
+    ds_polar.attrs.update(_provenance_attrs(nominal_time, background, ray_weight))
 
     # --- Georeferencing & output --------------------------------------------
     da_proj = polar_to_projected(
@@ -192,16 +205,50 @@ def process(
 
     # --- State update -------------------------------------------------------
     if state_path is not None:
-        new_top_km = compute_new_top(ray_top, ray_weight)
-        if new_top_km is not None:
-            new_state = BackgroundState(
-                top_km=new_top_km, timestamp=datetime.now(UTC)
-            )
-            save_state(state_path, new_state)
-            logger.info("Updated background state: %.1f km", new_top_km)
-        else:
-            logger.info(
-                "Insufficient valid rays; background state not updated"
-            )
+        _update_state(state_path, state, nominal_time, ray_top, ray_weight)
 
     logger.info("Done: %s", output_path)
+
+
+def _provenance_attrs(
+    nominal_time: datetime, background: Background, ray_weight: np.ndarray
+) -> dict[str, str | float]:
+    """Output metadata describing how the product was derived.
+
+    ``echo_coverage`` is the mean ray weight (legacy ``TOP_PERCENTAGE``
+    / 100); ``valid_ray_fraction`` the fraction of fully echo-covered
+    rays.  Low values mean the product relies mostly on the background.
+    """
+    attrs: dict[str, str | float] = {
+        "nominal_time": nominal_time.isoformat(),
+        "background_top_km": round(background.top_km, 2),
+        "background_source": background.source,
+        "echo_coverage": round(float(np.mean(ray_weight)), 3),
+        "valid_ray_fraction": round(float(np.mean(ray_weight >= VALID_RAY_WEIGHT)), 3),
+    }
+    if background.age_hours is not None:
+        attrs["background_age_hours"] = round(background.age_hours, 2)
+    return attrs
+
+
+def _update_state(
+    state_path: str | Path,
+    state: BackgroundState | None,
+    nominal_time: datetime,
+    ray_top: np.ndarray,
+    ray_weight: np.ndarray,
+) -> None:
+    """Persist a new background TOP, unless the existing state is newer."""
+    if state is not None and nominal_time < state.timestamp:
+        logger.info(
+            "Background state (%s) is newer than data (%s); not updated",
+            state.timestamp.isoformat(),
+            nominal_time.isoformat(),
+        )
+        return
+    new_top_km = compute_new_top(ray_top, ray_weight)
+    if new_top_km is None:
+        logger.info("Insufficient valid rays; background state not updated")
+        return
+    save_state(state_path, BackgroundState(top_km=new_top_km, timestamp=nominal_time))
+    logger.info("Updated background state: %.1f km", new_top_km)

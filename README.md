@@ -32,6 +32,38 @@ beam *bottom* edge reaches it (zero filling). Note that `255` serves both as
 the "total overshoot" value and, when `max_range_m` is supplied, as the GeoTIFF
 nodata value for out-of-range pixels.
 
+### Background echo top and clear sky
+
+Rays with little or no echo are blended with a **background echo top**, so
+that clear-sky output stays meaningful. The background is always defined:
+
+- **`state`** — the last valid observed TOP from the state file (`state_path`),
+  if it is no older than the grace period (2.25 h).
+- **`aged_state`** — an older state, converging linearly toward climatology
+  over 48 h.
+- **`climatology`** — `climatology_top_km` (default 5.5 km) when there is no
+  usable state, including when `state_path` is not given.
+
+State ages are measured from the input's ODIM nominal time (`/what` `date` +
+`time`), not wall-clock time, so retries and backfills give reproducible
+results. Older data never overwrites the state saved from newer data.
+
+### Metadata tags
+
+The GeoTIFF carries provenance tags:
+
+| Tag                    | Meaning                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `nominal_time`         | ODIM nominal time of the input (ISO 8601, UTC)                               |
+| `background_top_km`    | Background echo top used for blending [km]                                   |
+| `background_source`    | `state`, `aged_state` or `climatology`                                       |
+| `background_age_hours` | Age of the state relative to `nominal_time` (only if a state was available)  |
+| `echo_coverage`        | Mean ray weight, 0–1 (legacy `TOP_PERCENTAGE` / 100)                         |
+| `valid_ray_fraction`   | Fraction of rays fully covered by echo (weight ≥ 0.99)                       |
+| `lowest_elevation_deg`, `beamwidth_deg`, `sitealt_m`, `range_resolution_m` | Beam geometry used |
+
+A low `echo_coverage` means the product relies mostly on the background TOP.
+
 ## Usage
 
 ```python
