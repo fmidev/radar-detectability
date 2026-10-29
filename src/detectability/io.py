@@ -53,7 +53,7 @@ def read_echotop(path: str | Path) -> xr.Dataset:
     for zeroing or masking them.
     """
     path = Path(path)
-    dt = xd.io.open_odim_datatree(str(path))
+    dt = xd.open_datatree(path, engine="odim")
     ds = dt["sweep_0"].ds
 
     if _HGHT_QUANTITY not in ds:
