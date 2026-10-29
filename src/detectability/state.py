@@ -19,13 +19,21 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
 
-from detectability.defaults import CLIMATOLOGY_TOP_KM, GRACE_HOURS, MAX_AGE_HOURS
+from detectability.defaults import (
+    CLIMATOLOGY_TOP_KM,
+    GRACE_HOURS,
+    MAX_AGE_HOURS,
+    VALID_RAY_WEIGHT,
+)
 
 logger = logging.getLogger(__name__)
+
+type BackgroundSource = Literal["state", "aged_state", "climatology"]
 
 
 @dataclass
@@ -36,14 +44,31 @@ class BackgroundState:
     """Background TOP value [km]."""
 
     timestamp: datetime
-    """Time when this TOP was last validly updated."""
+    """Nominal time of the data from which this TOP was last derived (UTC)."""
+
+
+@dataclass(frozen=True)
+class Background:
+    """Background TOP resolved for a single pipeline run."""
+
+    top_km: float
+    """Effective background TOP [km]."""
+
+    source: BackgroundSource
+    """``"state"`` (fresh), ``"aged_state"`` (aged toward climatology),
+    or ``"climatology"`` (no usable state)."""
+
+    age_hours: float | None
+    """Age of the persisted state [h] relative to the data, ``None`` if
+    no state was available."""
 
 
 def load_state(path: str | Path) -> BackgroundState | None:
     """Load background state from a JSON file.
 
     Returns ``None`` (and logs a warning) if the file is missing,
-    unreadable, or contains invalid data.
+    unreadable, or contains invalid data.  Naive timestamps are
+    interpreted as UTC.
     """
     path = Path(path)
     if not path.exists():
@@ -51,10 +76,10 @@ def load_state(path: str | Path) -> BackgroundState | None:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return BackgroundState(
-            top_km=float(data["top_km"]),
-            timestamp=datetime.fromisoformat(data["timestamp"]),
-        )
+        timestamp = datetime.fromisoformat(data["timestamp"])
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        return BackgroundState(top_km=float(data["top_km"]), timestamp=timestamp)
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         logger.warning("Corrupt state file %s: %s", path, exc)
         return None
@@ -121,11 +146,56 @@ def age_background_top(
     return state.top_km - rel_age * (state.top_km - climatology_km)
 
 
+def resolve_background(
+    state: BackgroundState | None,
+    now: datetime,
+    *,
+    climatology_km: float = CLIMATOLOGY_TOP_KM,
+    max_age_hours: float = MAX_AGE_HOURS,
+    grace_hours: float = GRACE_HOURS,
+) -> Background:
+    """Resolve the background TOP to use for the data valid at ``now``.
+
+    Always returns a value: the persisted state (aged toward climatology
+    if older than ``grace_hours``), or ``climatology_km`` when no state
+    is available.  Unlike the legacy implementation, which starts with
+    no background, this keeps clear-sky output meaningful from the very
+    first run.
+
+    Parameters
+    ----------
+    state
+        Persisted background state, or ``None``.
+    now
+        Nominal time of the data being processed (timezone-aware).
+    """
+    if state is None:
+        return Background(top_km=climatology_km, source="climatology", age_hours=None)
+    age_hours = (now - state.timestamp).total_seconds() / 3600.0
+    if age_hours < 0.0:
+        # E.g. backfill of older data after newer runs; use state as is
+        logger.info(
+            "Background state (%s) is newer than data (%s)",
+            state.timestamp.isoformat(),
+            now.isoformat(),
+        )
+    if age_hours <= grace_hours:
+        return Background(top_km=state.top_km, source="state", age_hours=age_hours)
+    top_km = age_background_top(
+        state,
+        now,
+        climatology_km=climatology_km,
+        max_age_hours=max_age_hours,
+        grace_hours=grace_hours,
+    )
+    return Background(top_km=top_km, source="aged_state", age_hours=age_hours)
+
+
 def compute_new_top(
     ray_top: npt.ArrayLike,
     ray_weight: npt.ArrayLike,
     *,
-    valid_weight_threshold: float = 0.99,
+    valid_weight_threshold: float = VALID_RAY_WEIGHT,
     min_valid_fraction: float = 0.1,
 ) -> float | None:
     """Derive a new background TOP from the current scan's ray analysis.

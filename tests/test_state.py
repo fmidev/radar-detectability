@@ -18,6 +18,7 @@ from detectability.state import (
     age_background_top,
     compute_new_top,
     load_state,
+    resolve_background,
     save_state,
 )
 
@@ -60,6 +61,13 @@ class TestLoadSaveState:
             encoding="utf-8",
         )
         assert load_state(path) is None
+
+    def test_naive_timestamp_interpreted_as_utc(self, tmp_path: Path) -> None:
+        p = tmp_path / "state.json"
+        p.write_text('{"top_km": 6.0, "timestamp": "2026-03-19T12:00:00"}')
+        state = load_state(p)
+        assert state is not None
+        assert state.timestamp == datetime(2026, 3, 19, 12, tzinfo=UTC)
 
     def test_save_creates_parent_dirs(self, tmp_path: Path) -> None:
         path = tmp_path / "nested" / "dir" / "state.json"
@@ -141,6 +149,52 @@ class TestAgeBackgroundTop:
         # grace=0 → immediately starts aging
         result = age_background_top(state, now, grace_hours=0.0)
         assert result < 8.0
+
+
+# ---------------------------------------------------------------------------
+# Tests for resolve_background
+# ---------------------------------------------------------------------------
+
+
+class TestResolveBackground:
+    NOW = datetime(2026, 3, 19, 12, tzinfo=UTC)
+
+    def _state(self, hours_old: float, top_km: float = 8.0) -> BackgroundState:
+        return BackgroundState(
+            top_km=top_km, timestamp=self.NOW - timedelta(hours=hours_old)
+        )
+
+    def test_no_state_uses_climatology(self) -> None:
+        bg = resolve_background(None, self.NOW)
+        assert bg.top_km == CLIMATOLOGY_TOP_KM
+        assert bg.source == "climatology"
+        assert bg.age_hours is None
+
+    def test_no_state_custom_climatology(self) -> None:
+        bg = resolve_background(None, self.NOW, climatology_km=4.0)
+        assert bg.top_km == 4.0
+
+    def test_fresh_state(self) -> None:
+        bg = resolve_background(self._state(1.0), self.NOW)
+        assert bg.top_km == 8.0
+        assert bg.source == "state"
+        assert bg.age_hours == pytest.approx(1.0)
+
+    def test_state_newer_than_data_used_as_is(self) -> None:
+        bg = resolve_background(self._state(-3.0), self.NOW)
+        assert bg.top_km == 8.0
+        assert bg.source == "state"
+        assert bg.age_hours == pytest.approx(-3.0)
+
+    def test_old_state_is_aged(self) -> None:
+        bg = resolve_background(self._state(10.0), self.NOW)
+        assert bg.source == "aged_state"
+        assert CLIMATOLOGY_TOP_KM < bg.top_km < 8.0
+
+    def test_very_old_state_reaches_climatology(self) -> None:
+        bg = resolve_background(self._state(100.0), self.NOW)
+        assert bg.source == "aged_state"
+        assert bg.top_km == pytest.approx(CLIMATOLOGY_TOP_KM)
 
 
 # ---------------------------------------------------------------------------

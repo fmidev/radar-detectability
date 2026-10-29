@@ -95,6 +95,13 @@ the legacy offset of 2.25 hours (roughly one volume scan cycle plus
 margin).
 """
 
+VALID_RAY_WEIGHT: float = 0.99
+"""Minimum ray weight for a ray to count as fully echo-covered ("valid").
+
+Used both for deciding whether to update the background state and for
+the ``valid_ray_fraction`` output tag.  Legacy: ``Wray > 0.99``.
+"""
+
 # ---------------------------------------------------------------------------
 # Range and resolution
 # ---------------------------------------------------------------------------
