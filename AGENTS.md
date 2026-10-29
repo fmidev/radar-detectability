@@ -1,4 +1,4 @@
-# detectability — Copilot Instructions
+# detectability — Agent Instructions
 
 Python package for computing radar detectability (beam overshooting/filling) products. This is a modern Python reimplementation/replacement of the C/shell legacy implementation in `legacy/`. To be used in Apache Airflow pipelines for operational radar data processing at the Finnish Meteorological Institute (FMI).
 
@@ -20,7 +20,9 @@ No `setup.py` or `requirements.txt` — all metadata lives in `pyproject.toml`.
 
 ## Airflow Integration
 
-This package is deployed as a containerized service in FMI's Airflow radar production system. The integration pattern:
+This package is deployed as a containerized service in FMI's Airflow radar production system. You may check the current deployment over ssh at dev.tutka:/airflow/dev/dags/radar_detectability. For changing the deployment, write a handower document describing the changes for an agent running on dev.tutka. 
+
+The integration pattern:
 
 - **Deployment**: Docker container with this package installed (built via [Containerfile](Containerfile), image `quay.io/fmi/radar-detectability:vx.y.z`).
 - **Airflow tasks**: Use `@task.docker` decorator to invoke Python API
