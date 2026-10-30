@@ -41,8 +41,12 @@ class TestLoadSaveState:
         assert loaded.top_km == pytest.approx(4.2, abs=0.1)
         assert loaded.timestamp == ts
 
-    def test_missing_file_returns_none(self, tmp_path: Path) -> None:
+    def test_missing_file_returns_none(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         assert load_state(tmp_path / "nonexistent.json") is None
+        assert "not found" in caplog.text
+        assert caplog.records[-1].levelname == "WARNING"
 
     def test_corrupt_json_returns_none(self, tmp_path: Path) -> None:
         path = tmp_path / "state.json"

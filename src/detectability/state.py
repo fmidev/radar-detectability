@@ -72,7 +72,9 @@ def load_state(path: str | Path) -> BackgroundState | None:
     """
     path = Path(path)
     if not path.exists():
-        logger.info("State file %s does not exist (first run?)", path)
+        # Expected only on the first run; otherwise the state was lost,
+        # e.g. removed by a cache cleanup.
+        logger.warning("State file %s not found; using climatology", path)
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

@@ -48,6 +48,10 @@ State ages are measured from the input's ODIM nominal time (`/what` `date` +
 `time`), not wall-clock time, so retries and backfills give reproducible
 results. Older data never overwrites the state saved from newer data.
 
+Keep the state file on persistent storage that is not cleaned up sooner than
+48 h after the last write. Deleting it earlier skips aging and drops the
+background straight to climatology (logged as a warning).
+
 ### Metadata tags
 
 The GeoTIFF carries provenance tags:
