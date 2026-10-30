@@ -10,6 +10,7 @@ result as a Cloud Optimized GeoTIFF.
 """
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
@@ -167,7 +168,7 @@ def write_detectability_cog(
     crs: str | rasterio.crs.CRS,
     transform: Affine,
     nodata: int | None = NODATA,
-    tags: dict[str, object] | None = None,
+    tags: Mapping[str, object] | None = None,
 ) -> None:
     """Write a single-band detectability grid as COG.
 

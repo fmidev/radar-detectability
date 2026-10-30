@@ -303,6 +303,23 @@ class TestProcessClearSky:
         assert float(tags["echo_coverage"]) == 0.0
         assert "background_age_hours" not in tags
 
+    def test_radar_tags_feed_composite(
+        self, clear_sky_echotop: Path, tmp_path: Path
+    ) -> None:
+        """Single-radar source tags end up in the composite radar list."""
+        out = tmp_path / "out.tif"
+        composite = tmp_path / "composite.tif"
+        process(clear_sky_echotop, out, lowest_elevation=0.3)
+        detectability.composite_min([out], composite)
+        with rasterio.open(str(out)) as src:
+            tags = src.tags()
+        assert tags["radar"] == "fivim"
+        assert tags["source"] == "NOD:fivim,WMO:02975"
+        with rasterio.open(str(composite)) as src:
+            ctags = src.tags()
+        assert ctags["radars"] == "fivim"
+        assert ctags["nominal_time"] == tags["nominal_time"]
+
 
 # ---------------------------------------------------------------------------
 # Integration: input bin size independent of product resolution

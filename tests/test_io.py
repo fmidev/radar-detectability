@@ -147,6 +147,11 @@ class TestReadEchotopReal:
         ds = read_echotop(REAL_ECHOTOP)
         assert ds.attrs["nominal_time"] == datetime(2026, 3, 19, 11, 20, tzinfo=UTC)
 
+    def test_source(self) -> None:
+        ds = read_echotop(REAL_ECHOTOP)
+        assert ds.attrs["radar"] == "fivim"
+        assert "PLC:Vimpeli" in ds.attrs["source"]
+
 
 # ---------------------------------------------------------------------------
 # Tests with synthetic ODIM fixture
@@ -214,3 +219,21 @@ class TestReadEchotopSynthetic:
             f["what"].attrs["time"] = np.bytes_("99")
         ds = read_echotop(bad)
         assert "nominal_time" not in ds.attrs
+
+    def test_source_from_what(self, synthetic_echotop: Path) -> None:
+        ds = read_echotop(synthetic_echotop)
+        assert ds.attrs["source"] == "NOD:fivim,WMO:02975"
+        assert ds.attrs["radar"] == "fivim"
+
+    def test_source_without_nod(
+        self, tmp_path: Path, synthetic_echotop: Path
+    ) -> None:
+        import shutil
+
+        no_nod = tmp_path / "no_nod.h5"
+        shutil.copy(synthetic_echotop, no_nod)
+        with h5py.File(no_nod, "a") as f:
+            f["what"].attrs["source"] = np.bytes_("WMO:02975,PLC:Vimpeli")
+        ds = read_echotop(no_nod)
+        assert ds.attrs["source"] == "WMO:02975,PLC:Vimpeli"
+        assert "radar" not in ds.attrs

@@ -20,6 +20,7 @@ def _write_test_cog(
     data: np.ndarray,
     bounds: tuple[float, float, float, float],
     nodata: int = NODATA,
+    tags: dict[str, str] | None = None,
 ) -> None:
     """Write a minimal uint8 COG for testing."""
     height, width = data.shape
@@ -36,6 +37,8 @@ def _write_test_cog(
     }
     with rasterio.open(path, "w", **profile) as dst:
         dst.write(data.astype(np.uint8), 1)
+        if tags:
+            dst.update_tags(**tags)
 
 
 class TestCompositeMin:
@@ -170,3 +173,66 @@ class TestCompositeMin:
             )
             with rasterio.open(out) as src:
                 assert src.dtypes[0] == "uint8"
+
+
+class TestCompositeProvenance:
+    """Composite GeoTIFF tags derived from the input tags."""
+
+    BOUNDS = (100000.0, 6600000.0, 110000.0, 6610000.0)
+    NOMINAL_TIME = "2026-03-19T11:20:00+00:00"
+
+    def _composite_tags(
+        self, tmp_path: Path, input_tags: list[dict[str, str]]
+    ) -> dict[str, str]:
+        data = np.full((20, 20), 50, dtype=np.uint8)
+        inputs = []
+        for i, tags in enumerate(input_tags):
+            inp = tmp_path / f"radar{i}.tif"
+            _write_test_cog(inp, data, self.BOUNDS, tags=tags)
+            inputs.append(inp)
+        out = tmp_path / "composite.tif"
+        composite_min(inputs, out, bounds=self.BOUNDS, resolution=500.0)
+        with rasterio.open(out) as src:
+            return src.tags()
+
+    def test_radars_and_nominal_time(self, tmp_path: Path) -> None:
+        tags = self._composite_tags(
+            tmp_path,
+            [
+                {"radar": "fivim", "nominal_time": self.NOMINAL_TIME},
+                {"radar": "fikor", "nominal_time": self.NOMINAL_TIME},
+            ],
+        )
+        assert tags["radars"] == "fikor,fivim"
+        assert tags["n_radars"] == "2"
+        assert tags["nominal_time"] == self.NOMINAL_TIME
+        assert tags["composite_method"] == "min"
+
+    def test_missing_radar_tag_excluded(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        tags = self._composite_tags(
+            tmp_path,
+            [
+                {"radar": "fivim", "nominal_time": self.NOMINAL_TIME},
+                {"nominal_time": self.NOMINAL_TIME},
+            ],
+        )
+        assert tags["radars"] == "fivim"
+        assert tags["n_radars"] == "2"
+        assert "No radar tag" in caplog.text
+
+    def test_missing_nominal_time_omitted(self, tmp_path: Path) -> None:
+        tags = self._composite_tags(tmp_path, [{"radar": "fivim"}])
+        assert tags["radars"] == "fivim"
+        assert "nominal_time" not in tags
+
+    def test_differing_nominal_times_raise(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="differing nominal times"):
+            self._composite_tags(
+                tmp_path,
+                [
+                    {"radar": "fivim", "nominal_time": self.NOMINAL_TIME},
+                    {"radar": "fikor", "nominal_time": "2026-03-19T11:15:00+00:00"},
+                ],
+            )

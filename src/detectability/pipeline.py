@@ -65,8 +65,8 @@ def process(
 
     Reads a polar echotop ODIM HDF5 file, computes detectability ranges
     and writes the result as a Cloud Optimized GeoTIFF.  Provenance
-    (nominal time, background TOP and its source, echo coverage) is
-    written as GeoTIFF tags.
+    (radar, nominal time, background TOP and its source, echo coverage)
+    is written as GeoTIFF tags.
 
     Parameters
     ----------
@@ -144,6 +144,9 @@ def process(
             nominal_time.isoformat(),
         )
 
+    if "radar" not in ds.attrs:
+        logger.warning("Radar NOD not found in %s /what source", input_path.name)
+
     radar_lon = float(ds.coords["longitude"].values)
     radar_lat = float(ds.coords["latitude"].values)
     radar_alt = float(ds.coords["altitude"].values)
@@ -197,6 +200,10 @@ def process(
         nbins=out_nbins,
     )
     ds_polar.attrs.update(_provenance_attrs(nominal_time, background, ray_weight))
+    # ODIM source identification, used e.g. for listing composite inputs
+    ds_polar.attrs.update(
+        {k: ds.attrs[k] for k in ("radar", "source") if k in ds.attrs}
+    )
 
     # --- Georeferencing & output --------------------------------------------
     da_proj = polar_to_projected(

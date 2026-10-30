@@ -5,7 +5,7 @@
 """Read pre-computed polar echotop products in ODIM HDF5 format.
 
 Uses xradar for reading; h5py is used only to extract metadata
-(nominal time, beamwidth) that xradar does not expose.
+(nominal time, source, beamwidth) that xradar does not expose.
 """
 
 import logging
@@ -45,6 +45,8 @@ def read_echotop(path: str | Path) -> xr.Dataset:
         they are added as ``beamwidth_h`` / ``beamwidth_v`` attrs [deg].
         The ODIM nominal time (``/what`` ``date`` + ``time``) is added as
         a timezone-aware UTC ``datetime`` attr ``nominal_time``, if present.
+        The ODIM ``/what`` ``source`` string is added as attr ``source``
+        and its ``NOD`` identifier (e.g. ``fivim``) as attr ``radar``.
 
     Notes
     -----
@@ -82,14 +84,15 @@ def read_echotop(path: str | Path) -> xr.Dataset:
     return ds
 
 
-def _read_odim_attrs(path: Path) -> dict[str, float | datetime]:
+def _read_odim_attrs(path: Path) -> dict[str, str | float | datetime]:
     """Extract metadata from the ODIM ``/what`` and ``/how`` groups.
 
-    Returns a dict that may contain ``nominal_time`` (UTC datetime) and
+    Returns a dict that may contain ``nominal_time`` (UTC datetime),
+    ``source`` / ``radar`` (ODIM source string and its NOD) and
     ``beamwidth_h`` / ``beamwidth_v`` (degrees).  Missing or malformed
     attributes are omitted.
     """
-    result: dict[str, float | datetime] = {}
+    result: dict[str, str | float | datetime] = {}
     try:
         with h5py.File(path, "r") as f:
             what = f.get("what")
@@ -99,6 +102,11 @@ def _read_odim_attrs(path: Path) -> dict[str, float | datetime]:
                 )
                 if nominal_time is not None:
                     result["nominal_time"] = nominal_time
+                if (source_attr := what.attrs.get("source")) is not None:
+                    source = result["source"] = _decode(source_attr)
+                    nod = _parse_nod(source)
+                    if nod is not None:
+                        result["radar"] = nod
             how = f.get("how")
             if how is not None:
                 for odim_key, our_key in (
@@ -117,10 +125,7 @@ def _parse_nominal_time(date: object, time: object) -> datetime | None:
     """Parse ODIM ``YYYYMMDD`` + ``HHmmss`` attributes into a UTC datetime."""
     if date is None or time is None:
         return None
-    date_str, time_str = (
-        v.decode(errors="replace") if isinstance(v, bytes) else str(v)
-        for v in (date, time)
-    )
+    date_str, time_str = _decode(date), _decode(time)
     # Check the format strictly: strptime accepts e.g. "20260319" + "99"
     if re.fullmatch(r"\d{8}", date_str) and re.fullmatch(r"\d{6}", time_str):
         try:
@@ -131,3 +136,21 @@ def _parse_nominal_time(date: object, time: object) -> datetime | None:
             pass
     logger.warning("Malformed ODIM nominal time: date=%r time=%r", date, time)
     return None
+
+
+def _parse_nod(source: str) -> str | None:
+    """Extract the ``NOD`` identifier from an ODIM source string.
+
+    E.g. ``"WMO:02925,RAD:FI49,PLC:Vimpeli,NOD:fivim"`` -> ``"fivim"``.
+    """
+    for item in source.split(","):
+        key, _, value = item.partition(":")
+        if key.strip() == "NOD" and value.strip():
+            return value.strip()
+    logger.warning("No NOD identifier in ODIM source: %r", source)
+    return None
+
+
+def _decode(value: object) -> str:
+    """HDF5 attribute value as ``str``."""
+    return value.decode(errors="replace") if isinstance(value, bytes) else str(value)
