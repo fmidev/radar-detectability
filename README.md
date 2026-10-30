@@ -1,36 +1,51 @@
 # detectability
 
-Computes radar precipitation detectability fields from polar echotop (HGHT) ODIM HDF5 data. Outputs a Cloud Optimized GeoTIFF encoding, for each azimuth, the range interval over which the lowest radar sweep transitions from full beam overshoot to full beam filling.
+Computes radar precipitation detectability fields from polar echo-top (HGHT)
+ODIM HDF5 data. For each azimuth, the output encodes the range interval over
+which the lowest sweep transitions from full beam filling to full beam
+overshoot. Single-radar products can be merged into a national composite.
+
+Python replacement for the legacy C/shell implementation in [`legacy/`](legacy/).
 
 ## Algorithm
 
-1. **Filter** — remove point-like azimuthal artefacts (clutter, birds, aircraft) from the raw echotop field.
-2. **Ray-top analysis** — for each radial, derive a representative echo-top height from the upper decile of range bins within the analysis window.
-3. **Sector smoothing** — azimuthally smooth ray tops with a linearly-weighted sliding window to suppress directional noise.
-4. **Detection ranges** — using standard beam propagation geometry, compute the ranges at which the bottom and top edges of the lowest sweep align with the smoothed echo top. These define the partial-detection transition zone.
-5. **Georeferencing** — reproject from polar to a projected CRS and write a COG.
+1. **Filter** — remove isolated azimuthal spikes (clutter, birds, aircraft)
+   from the echo-top field.
+2. **Ray TOP** — per ray, pick a representative echo top from the highest
+   bins (`highpart`, default top 10%) within the analysis window
+   (`min_range_km`–`max_range_km`, default 10–240 km). The fraction of those
+   bins with echo is the ray weight.
+3. **Sector smoothing** — azimuthally smooth ray TOPs with a triangular
+   kernel (default 61°), blending low-weight rays toward a
+   [background echo top](#background-echo-top-and-clear-sky).
+4. **Detection ranges** — using 4/3 effective earth radius beam geometry,
+   find the ranges where the top and bottom edges of the lowest sweep reach
+   the smoothed echo top.
+5. **Georeferencing** — regrid from polar to a projected CRS and write a COG.
 
 ## Output
 
-The product is a single-band, 8-bit Cloud Optimized GeoTIFF in a projected
-CRS (default EPSG:3067 / ETRS-TM35FIN), regridded from polar coordinates to a
-regular grid (default 500 m cells) by nearest-neighbour interpolation.
+A single-band `uint8` Cloud Optimized GeoTIFF in a projected CRS (default
+EPSG:3067 / ETRS-TM35FIN), regridded to 500 m cells by nearest neighbour.
 
-The pixel value encodes the **degree of beam overshoot** of the lowest sweep
-on a linear `uint8` ramp:
+The pixel value is the **beam overshoot** of the lowest sweep: the percentage
+of the 3 dB beam height lying above the smoothed echo top (band description
+`beam overshoot`, unit `%`):
 
-| Value          | Meaning                                                               |
-| -------------- | --------------------------------------------------------------------- |
-| `0`            | Full beam filling — precipitation at this point is fully detected     |
-| `1`–`254`      | Partial detection — within the transition zone, increasing overshoot  |
-| `255`          | Total overshoot — the beam passes entirely above the echo top         |
-| `255` (nodata) | Beyond `max_range_m`, where set, pixels are masked to nodata          |
+| Value     | Meaning                                                    |
+| --------- | ---------------------------------------------------------- |
+| `0`       | Full beam filling — precipitation is fully detected        |
+| `1`–`99`  | Partial overshoot                                          |
+| `100`     | Total overshoot — the whole beam is above the echo top     |
+| `255`     | Nodata — outside the radar's coverage                      |
 
-For each azimuth the ramp runs from `0` at the range where the beam *top* edge
-reaches the smoothed echo top (full filling) to `255` at the range where the
-beam *bottom* edge reaches it (zero filling). Note that `255` serves both as
-the "total overshoot" value and, when `max_range_m` is supplied, as the GeoTIFF
-nodata value for out-of-range pixels.
+Values `101`–`254` are reserved. Per bin, overshoot is
+`(h_top − TOP) / (h_top − h_bot)`, clipped to 0–1, where `h_top` and `h_bot`
+are the heights of the beam's upper and lower edges.
+
+The legacy product was a linear-in-range ramp from `0` to `255` between the
+same endpoints (beam top / beam bottom reaching TOP); the geometric fraction
+is up to ~12 percentage points higher in between.
 
 ### Background echo top and clear sky
 
@@ -50,11 +65,12 @@ results. Older data never overwrites the state saved from newer data.
 
 Keep the state file on persistent storage that is not cleaned up sooner than
 48 h after the last write. Deleting it earlier skips aging and drops the
-background straight to climatology (logged as a warning).
+background straight to climatology (logged as a warning). Use one state file
+per radar, and don't run backfills concurrently with live runs that share it.
 
 ### Metadata tags
 
-The GeoTIFF carries provenance tags:
+Single-radar GeoTIFFs carry provenance tags:
 
 | Tag                    | Meaning                                                                      |
 | ---------------------- | ---------------------------------------------------------------------------- |
@@ -68,19 +84,30 @@ The GeoTIFF carries provenance tags:
 
 A low `echo_coverage` means the product relies mostly on the background TOP.
 
+### Composite
+
+`composite_min` merges single-radar products onto a fixed grid (default: the
+Finrad extent in EPSG:3067) by pixel-wise minimum, i.e. the best
+detectability wins. Cells covered by no radar are nodata (`255`).
+
 ## Usage
 
 ```python
-from detectability import process
+from detectability import composite_min, process
 
 process(
-    "vantaa_echotop_202601010000.h5",
-    "vantaa_detectability.tif",
-    lowest_elevation=0.5,   # degrees
-    beamwidth=1.0,          # degrees; read from file if omitted
-    crs="EPSG:3067",
+    "202603191120_fivim_etop_-10_dbzh_polar_qc.h5",
+    "fivim_detectability.tif",
+    lowest_elevation=0.3,              # degrees
+    state_path="state/fivim.json",     # optional; see above
 )
+
+composite_min(["fivim_detectability.tif", ...], "composite.tif")
 ```
+
+The beamwidth is read from the input file (`/how` `beamwH`) unless given as
+`beamwidth=`. Other tuning parameters and their defaults are documented in
+[`defaults.py`](src/detectability/defaults.py).
 
 ## Install
 
@@ -88,11 +115,20 @@ process(
 pip install .
 ```
 
-Requires Python ≥ 3.14 and GDAL/GEOS/PROJ system libraries (for rioxarray).
+Requires Python ≥ 3.14.
+
+## Development
+
+```bash
+hatch run test:run      # pytest
+hatch run types:check   # mypy
+```
 
 ## Container
 
-A two-stage `Containerfile` is provided for use as an Airflow `@task.docker` worker:
+A two-stage [`Containerfile`](Containerfile) builds the image used by Airflow
+`@task.docker` tasks (published as `quay.io/fmi/radar_detectability:vX.Y.Z`).
+It has no entrypoint:
 
 ```bash
 podman build -t detectability .

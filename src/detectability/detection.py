@@ -11,8 +11,17 @@ Corresponds to the detection range encoding section of
 import numpy as np
 import numpy.typing as npt
 import xarray as xr
+from wradlib.georef import bin_altitude
 
 from detectability.beam import slant_range_from_height
+
+#: Nodata value of the uint8 product (outside radar coverage).
+#: Values 101–254 are reserved.
+NODATA: int = 255
+#: Band description of the output rasters.
+BAND_DESCRIPTION: str = "beam overshoot"
+#: Unit of the output rasters.
+BAND_UNIT: str = "%"
 
 
 def compute_detection_ranges(
@@ -26,9 +35,20 @@ def compute_detection_ranges(
 ) -> xr.Dataset:
     """Compute radar detection range field from smoothed TOP heights.
 
-    For each azimuth, determines the slant-range interval where
-    detectability transitions from full beam filling (value 0) to total
-    beam overshooting (value 255).
+    Each bin holds the beam overshoot: the percentage of the 3 dB beam
+    cross-section above the echo top,
+
+    .. math::
+
+        100 \\cdot \\frac{h_{top}(r) - TOP}{h_{top}(r) - h_{bot}(r)}
+
+    clipped to 0–100 and rounded, where :math:`h_{top}` and
+    :math:`h_{bot}` are the heights of the upper and lower beam edges.
+    0 = full beam filling, 100 = total overshooting.
+
+    Legacy encoded a linear ramp in *range* from 0 at ``range_full`` to
+    255 at ``range_zero``; the endpoints are the same but the geometric
+    fraction is slightly higher in between.
 
     Parameters
     ----------
@@ -52,8 +72,9 @@ def compute_detection_ranges(
     xarray.Dataset
         Dataset with:
 
-        - ``detectability`` — ``uint8`` polar grid (azimuth × range),
-          0 = full beam filling, 255 = total overshooting.
+        - ``detectability`` — ``uint8`` polar grid (azimuth × range) of
+          beam overshoot [%], 0 = full beam filling, 100 = total
+          overshooting, :data:`NODATA` where TOP is undefined.
         - ``range_full`` — slant range [m] per azimuth where beam top
           reaches TOP (full filling limit).
         - ``range_zero`` — slant range [m] per azimuth where beam
@@ -64,7 +85,7 @@ def compute_detection_ranges(
     half_bw = beamwidth / 2.0
 
     # Slant range at which the beam *top* edge (elev + half_bw) reaches TOP.
-    # Beyond this range the beam is fully filled.
+    # Within this range the beam is fully filled.
     # Legacy: maxR_analyzed_highbeam = bindist(TOP*1000, lowest_elev+half_bw, 0)
     range_full = slant_range_from_height(
         top, lowest_elevation + half_bw, sitealt
@@ -77,22 +98,20 @@ def compute_detection_ranges(
         top, lowest_elevation - half_bw, sitealt
     )
 
-    # Build output polar grid
-    # Legacy: B in 0..499, range = B * 500m, so B/2.0 = range in km
     range_m = (np.arange(nbins) + 0.5) * range_resolution  # bin centres
-    # shape: (nrays, nbins) via broadcasting
-    r = range_m[np.newaxis, :]  # (1, nbins)
-    rf = range_full[:, np.newaxis]  # (nrays, 1)
-    rz = range_zero[:, np.newaxis]  # (nrays, 1)
 
-    # Linear ramp from 0 at range_full to 255 at range_zero
-    # Legacy: k = 255/(lowbeam - highbeam);
-    #         outbyte = (B/2.0 - highbeam) * k  if B > 2*highbeam
-    span = rz - rf
-    # Avoid division by zero when TOP is very low (ranges collapse)
-    safe_span = np.where(span > 0, span, 1.0)
-    frac = (r - rf) / safe_span
-    grid = np.clip(frac * 255.0, 0, 255).astype(np.uint8)
+    # Beam edge heights per range bin, shape (nbins,)
+    h_top = bin_altitude(range_m, lowest_elevation + half_bw, sitealt)
+    h_bot = bin_altitude(range_m, lowest_elevation - half_bw, sitealt)
+
+    # Fraction of the beam above TOP, shape (nrays, nbins).
+    # Replaces the legacy linear-in-range ramp:
+    #   k = 255/(lowbeam - highbeam); outbyte = (B/2.0 - highbeam) * k
+    # h_top > h_bot for all bin centres (r > 0), so no division by zero.
+    frac = (h_top - top[:, np.newaxis]) / (h_top - h_bot)
+    grid = np.where(
+        np.isfinite(frac), np.rint(np.clip(frac, 0.0, 1.0) * 100.0), NODATA
+    ).astype(np.uint8)
 
     # Coordinates
     azimuth = np.arange(nrays, dtype=np.float64)

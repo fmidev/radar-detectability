@@ -12,7 +12,7 @@ import pytest
 import rasterio
 import xarray as xr
 
-from detectability.detection import compute_detection_ranges
+from detectability.detection import NODATA, compute_detection_ranges
 from detectability.georef import polar_to_projected, write_cog
 
 # Vimpeli radar parameters
@@ -61,7 +61,7 @@ class TestPolarToProjected:
         )
         assert da.dtype == np.uint8
 
-    def test_value_range_0_255(self) -> None:
+    def test_value_range_0_100(self) -> None:
         ds = _make_detection_ds(nbins=50)
         da = polar_to_projected(
             ds,
@@ -70,7 +70,7 @@ class TestPolarToProjected:
             radar_alt=RADAR_ALT,
         )
         assert da.values.min() >= 0
-        assert da.values.max() <= 255
+        assert da.values.max() <= 100
 
     def test_has_crs(self) -> None:
         ds = _make_detection_ds(nbins=50)
@@ -256,6 +256,38 @@ class TestWriteCog:
             with rasterio.open(path) as src:
                 assert src.dtypes[0] == "uint8"
 
+    def test_cog_band_description_and_unit(self) -> None:
+        ds = _make_detection_ds(nbins=50)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.tif"
+            write_cog(da, path)
+            with rasterio.open(path) as src:
+                assert src.descriptions == ("beam overshoot",)
+                assert src.units == ("%",)
+
+    def test_cog_attrs_written_as_tags(self) -> None:
+        ds = _make_detection_ds(nbins=50)
+        da = polar_to_projected(
+            ds,
+            radar_lon=RADAR_LON,
+            radar_lat=RADAR_LAT,
+            radar_alt=RADAR_ALT,
+            max_range_m=50 * 500.0,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.tif"
+            write_cog(da, path)
+            with rasterio.open(path) as src:
+                tags = src.tags()
+        assert float(tags["beamwidth_deg"]) == BEAMWIDTH
+        assert "_FillValue" not in tags
+
 
 class TestNodataMask:
     """Tests for max_range_m nodata masking."""
@@ -269,7 +301,7 @@ class TestNodataMask:
             radar_alt=RADAR_ALT,
             max_range_m=50 * 500.0,
         )
-        assert da.rio.nodata == 255
+        assert da.rio.nodata == NODATA
 
     def test_no_nodata_without_max_range(self) -> None:
         ds = _make_detection_ds(nbins=50)
@@ -281,7 +313,7 @@ class TestNodataMask:
         )
         assert da.rio.nodata is None
 
-    def test_corners_masked_to_255(self) -> None:
+    def test_corners_masked_to_nodata(self) -> None:
         """Corners of the rectangular grid should be beyond circular range."""
         nbins = 50
         max_range_m = nbins * 500.0
@@ -293,12 +325,12 @@ class TestNodataMask:
             radar_alt=RADAR_ALT,
             max_range_m=max_range_m,
         )
-        # Corners of the array should be nodata (255) since they are
+        # Corners of the array should be nodata since they are
         # farther from radar centre than max_range
-        assert da.values[0, 0] == 255
-        assert da.values[0, -1] == 255
-        assert da.values[-1, 0] == 255
-        assert da.values[-1, -1] == 255
+        assert da.values[0, 0] == NODATA
+        assert da.values[0, -1] == NODATA
+        assert da.values[-1, 0] == NODATA
+        assert da.values[-1, -1] == NODATA
 
     def test_centre_not_masked(self) -> None:
         """Centre of the grid (near radar) should not be masked."""
@@ -314,10 +346,10 @@ class TestNodataMask:
         )
         ny, nx = da.shape
         # Centre pixel should not be nodata
-        assert da.values[ny // 2, nx // 2] != 255
+        assert da.values[ny // 2, nx // 2] != NODATA
 
     def test_cog_preserves_nodata(self) -> None:
-        """Written COG should have nodata=255 in metadata."""
+        """Written COG should have nodata in metadata."""
         ds = _make_detection_ds(nbins=50)
         da = polar_to_projected(
             ds,
@@ -330,4 +362,4 @@ class TestNodataMask:
             path = Path(tmpdir) / "test.tif"
             write_cog(da, path)
             with rasterio.open(path) as src:
-                assert src.nodata == 255
+                assert src.nodata == NODATA

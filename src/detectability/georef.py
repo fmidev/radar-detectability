@@ -13,9 +13,14 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
+import rasterio
 import xarray as xr
+from rasterio.transform import Affine
 from scipy.interpolate import NearestNDInterpolator
 from wradlib.georef import spherical_to_proj
+
+from detectability.detection import BAND_DESCRIPTION, BAND_UNIT, NODATA
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +55,16 @@ def polar_to_projected(
         Target grid cell size [m].
     max_range_m
         Maximum radar range [m].  Pixels beyond this distance from the
-        radar site are masked to nodata (255).  When ``None``, no
+        radar site are masked to :data:`~detectability.detection.NODATA`.
+        When ``None``, no
         masking is applied.
 
     Returns
     -------
     xarray.DataArray
         Projected detectability grid (y × x) with CRS attached via
-        rioxarray. Values are uint8, 0–255.  Nodata is 255 when
-        ``max_range_m`` is provided.
+        rioxarray.  Values are uint8 beam overshoot [%], 0–100.  Nodata
+        is set when ``max_range_m`` is provided.
     """
     import rioxarray  # noqa: F401 — registers .rio accessor
 
@@ -122,14 +128,16 @@ def polar_to_projected(
         ys = da.coords["y"].values
         gx, gy = np.meshgrid(xs, ys)
         dist = np.sqrt((gx - cx) ** 2 + (gy - cy) ** 2)
-        da.values[dist > max_range_m] = 255
-        da = da.rio.write_nodata(255)
+        da.values[dist > max_range_m] = NODATA
+        da = da.rio.write_nodata(NODATA)
 
     return da
 
 
 def write_cog(da: xr.DataArray, path: str | Path) -> None:
     """Write a projected DataArray to Cloud Optimized GeoTIFF.
+
+    Attributes are written as GeoTIFF tags.
 
     Parameters
     ----------
@@ -140,7 +148,62 @@ def write_cog(da: xr.DataArray, path: str | Path) -> None:
     """
     import rioxarray  # noqa: F401
 
+    tags = {k: v for k, v in da.attrs.items() if not k.startswith("_")}
+    write_detectability_cog(
+        path,
+        da.values,
+        crs=da.rio.crs,
+        transform=da.rio.transform(),
+        nodata=da.rio.nodata,
+        tags=tags,
+    )
+    logger.info("Wrote COG: %s", path)
+
+
+def write_detectability_cog(
+    path: str | Path,
+    data: npt.NDArray[np.uint8],
+    *,
+    crs: str | rasterio.crs.CRS,
+    transform: Affine,
+    nodata: int | None = NODATA,
+    tags: dict[str, object] | None = None,
+) -> None:
+    """Write a single-band detectability grid as COG.
+
+    Sets the band description and unit.  Written with rasterio directly
+    because rioxarray does not support band units.
+
+    Parameters
+    ----------
+    path
+        Output file path.  Parent directories are created.
+    data
+        2-D uint8 beam overshoot grid (y × x), north-up.
+    crs, transform
+        Georeferencing of *data*.
+    nodata
+        Nodata value, or ``None`` for none.
+    tags
+        Dataset-level GeoTIFF tags.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    da.rio.to_raster(str(path), driver="COG")
-    logger.info("Wrote COG: %s", path)
+    height, width = data.shape
+    with rasterio.open(
+        path,
+        "w",
+        driver="COG",
+        width=width,
+        height=height,
+        count=1,
+        dtype="uint8",
+        crs=crs,
+        transform=transform,
+        nodata=nodata,
+    ) as dst:
+        dst.write(data.astype(np.uint8), 1)
+        dst.set_band_description(1, BAND_DESCRIPTION)
+        dst.set_band_unit(1, BAND_UNIT)
+        if tags:
+            dst.update_tags(**tags)

@@ -11,7 +11,7 @@ keyword arguments to :func:`~detectability.process`.
 
 In Airflow ``@task.docker`` calls, pass these as keyword arguments::
 
-    @task.docker(image="quay.io/fmi/radar-detectability:v1.0.0")
+    @task.docker(image="quay.io/fmi/radar_detectability:v1.0.0")
     def process_radar(input_path, output_path, **kwargs):
         from detectability import process
         process(input_path, output_path, **kwargs)
@@ -116,7 +116,7 @@ MAX_RANGE_KM: float = 240.0
 """Maximum radial range [km] for ray TOP analysis."""
 
 RANGE_RESOLUTION: float = 500.0
-"""Range bin size [m] of the output detectability grid."""
+"""Range bin size [m] of the polar detectability grid, independent of the input."""
 
 # ---------------------------------------------------------------------------
 # Compositing

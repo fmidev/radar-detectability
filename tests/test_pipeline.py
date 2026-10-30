@@ -17,6 +17,7 @@ import xarray as xr
 
 import detectability
 from detectability.defaults import CLIMATOLOGY_TOP_KM
+from detectability.detection import NODATA
 from detectability.pipeline import process
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -28,6 +29,53 @@ REAL_ECHOTOP = DATA_DIR / "202603191120_fivim_etop_-10_dbzh_polar_qc.h5"
 # ---------------------------------------------------------------------------
 
 
+def _write_echotop(path: Path, raw: np.ndarray, *, rscale: float = 500.0) -> Path:
+    """Write a minimal ODIM HDF5 polar echotop (HGHT, gain 1, offset 0)."""
+    nrays, nbins = raw.shape
+    with h5py.File(path, "w") as f:
+        what = f.create_group("what")
+        what.attrs["object"] = np.bytes_("PVOL")
+        what.attrs["version"] = np.bytes_("H5rad 2.2")
+        what.attrs["date"] = np.bytes_("20260319")
+        what.attrs["time"] = np.bytes_("120000")
+        what.attrs["source"] = np.bytes_("NOD:fivim,WMO:02975")
+
+        where = f.create_group("where")
+        where.attrs["lon"] = 23.82
+        where.attrs["lat"] = 63.10
+        where.attrs["height"] = 150.0
+
+        how = f.create_group("how")
+        how.attrs["beamwH"] = 1.0
+        how.attrs["beamwV"] = 0.9
+
+        ds1 = f.create_group("dataset1")
+        ds1_what = ds1.create_group("what")
+        ds1_what.attrs["product"] = np.bytes_("ETOP")
+        ds1_what.attrs["startdate"] = np.bytes_("20260319")
+        ds1_what.attrs["starttime"] = np.bytes_("120000")
+        ds1_what.attrs["enddate"] = np.bytes_("20260319")
+        ds1_what.attrs["endtime"] = np.bytes_("120200")
+
+        ds1_where = ds1.create_group("where")
+        ds1_where.attrs["elangle"] = 0.0
+        ds1_where.attrs["nbins"] = np.int64(nbins)
+        ds1_where.attrs["nrays"] = np.int64(nrays)
+        ds1_where.attrs["rscale"] = rscale
+        ds1_where.attrs["rstart"] = 0.0
+        ds1_where.attrs["a1gate"] = np.int64(0)
+
+        d1 = ds1.create_group("data1")
+        d1.create_dataset("data", data=raw.astype(np.uint16), dtype="uint16")
+        d1_what = d1.create_group("what")
+        d1_what.attrs["quantity"] = np.bytes_("HGHT")
+        d1_what.attrs["gain"] = 1.0
+        d1_what.attrs["offset"] = 0.0
+        d1_what.attrs["nodata"] = 65535.0
+        d1_what.attrs["undetect"] = 0.0
+    return path
+
+
 @pytest.fixture()
 def synthetic_echotop(tmp_path: Path) -> Path:
     """Create a 360×500 ODIM HDF5 with a known uniform HGHT field.
@@ -35,115 +83,15 @@ def synthetic_echotop(tmp_path: Path) -> Path:
     All bins set to 5000 m — produces a predictable, nonzero
     detectability output for every azimuth.
     """
-    nrays, nbins = 360, 500
-    rscale = 500.0
-    gain = 1.0
-    offset = 0.0
-    nodata = 65535.0
-    undetect = 0.0
-
-    raw = np.full((nrays, nbins), 5000, dtype=np.uint16)
-
-    fpath = tmp_path / "synthetic_etop.h5"
-    with h5py.File(fpath, "w") as f:
-        what = f.create_group("what")
-        what.attrs["object"] = np.bytes_("PVOL")
-        what.attrs["version"] = np.bytes_("H5rad 2.2")
-        what.attrs["date"] = np.bytes_("20260319")
-        what.attrs["time"] = np.bytes_("120000")
-        what.attrs["source"] = np.bytes_("NOD:fivim,WMO:02975")
-
-        where = f.create_group("where")
-        where.attrs["lon"] = 23.82
-        where.attrs["lat"] = 63.10
-        where.attrs["height"] = 150.0
-
-        how = f.create_group("how")
-        how.attrs["beamwH"] = 1.0
-        how.attrs["beamwV"] = 0.9
-
-        ds1 = f.create_group("dataset1")
-        ds1_what = ds1.create_group("what")
-        ds1_what.attrs["product"] = np.bytes_("ETOP")
-        ds1_what.attrs["startdate"] = np.bytes_("20260319")
-        ds1_what.attrs["starttime"] = np.bytes_("120000")
-        ds1_what.attrs["enddate"] = np.bytes_("20260319")
-        ds1_what.attrs["endtime"] = np.bytes_("120200")
-
-        ds1_where = ds1.create_group("where")
-        ds1_where.attrs["elangle"] = 0.0
-        ds1_where.attrs["nbins"] = np.int64(nbins)
-        ds1_where.attrs["nrays"] = np.int64(nrays)
-        ds1_where.attrs["rscale"] = rscale
-        ds1_where.attrs["rstart"] = 0.0
-        ds1_where.attrs["a1gate"] = np.int64(0)
-
-        d1 = ds1.create_group("data1")
-        d1.create_dataset("data", data=raw, dtype="uint16")
-        d1_what = d1.create_group("what")
-        d1_what.attrs["quantity"] = np.bytes_("HGHT")
-        d1_what.attrs["gain"] = gain
-        d1_what.attrs["offset"] = offset
-        d1_what.attrs["nodata"] = nodata
-        d1_what.attrs["undetect"] = undetect
-
-    return fpath
+    raw = np.full((360, 500), 5000, dtype=np.uint16)
+    return _write_echotop(tmp_path / "synthetic_etop.h5", raw)
 
 
 @pytest.fixture()
 def clear_sky_echotop(tmp_path: Path) -> Path:
     """ODIM HDF5 with HGHT = 0 everywhere (no echo)."""
-    nrays, nbins = 360, 500
-    rscale = 500.0
-
-    fpath = tmp_path / "clearsky_etop.h5"
-    with h5py.File(fpath, "w") as f:
-        what = f.create_group("what")
-        what.attrs["object"] = np.bytes_("PVOL")
-        what.attrs["version"] = np.bytes_("H5rad 2.2")
-        what.attrs["date"] = np.bytes_("20260319")
-        what.attrs["time"] = np.bytes_("120000")
-        what.attrs["source"] = np.bytes_("NOD:fivim,WMO:02975")
-
-        where = f.create_group("where")
-        where.attrs["lon"] = 23.82
-        where.attrs["lat"] = 63.10
-        where.attrs["height"] = 150.0
-
-        how = f.create_group("how")
-        how.attrs["beamwH"] = 1.0
-        how.attrs["beamwV"] = 0.9
-
-        ds1 = f.create_group("dataset1")
-        ds1_what = ds1.create_group("what")
-        ds1_what.attrs["product"] = np.bytes_("ETOP")
-        ds1_what.attrs["startdate"] = np.bytes_("20260319")
-        ds1_what.attrs["starttime"] = np.bytes_("120000")
-        ds1_what.attrs["enddate"] = np.bytes_("20260319")
-        ds1_what.attrs["endtime"] = np.bytes_("120200")
-
-        ds1_where = ds1.create_group("where")
-        ds1_where.attrs["elangle"] = 0.0
-        ds1_where.attrs["nbins"] = np.int64(nbins)
-        ds1_where.attrs["nrays"] = np.int64(nrays)
-        ds1_where.attrs["rscale"] = rscale
-        ds1_where.attrs["rstart"] = 0.0
-        ds1_where.attrs["a1gate"] = np.int64(0)
-
-        d1 = ds1.create_group("data1")
-        d1.create_dataset(
-            "data",
-            data=np.zeros((nrays, nbins), dtype=np.uint16),
-            dtype="uint16",
-        )
-        d1_what = d1.create_group("what")
-        d1_what.attrs["quantity"] = np.bytes_("HGHT")
-        d1_what.attrs["gain"] = 1.0
-        d1_what.attrs["offset"] = 0.0
-        d1_what.attrs["nodata"] = 65535.0
-        d1_what.attrs["undetect"] = 0.0
-
-    return fpath
+    raw = np.zeros((360, 500), dtype=np.uint16)
+    return _write_echotop(tmp_path / "clearsky_etop.h5", raw)
 
 
 # ---------------------------------------------------------------------------
@@ -175,8 +123,8 @@ class TestProcessRealFile:
         process(REAL_ECHOTOP, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
             data = src.read(1)
-        assert data.min() >= 0
-        assert data.max() <= 255
+        assert ((data <= 100) | (data == NODATA)).all()
+        assert (data == NODATA).any()  # outside coverage
 
     def test_explicit_beamwidth_accepted(self, tmp_path: Path) -> None:
         out = tmp_path / "detectability.tif"
@@ -291,12 +239,12 @@ class TestProcessSynthetic:
     def test_contains_transition_zone(
         self, synthetic_echotop: Path, tmp_path: Path
     ) -> None:
-        """Detectability should include intermediate values (not just 0/255)."""
+        """Detectability should include intermediate values (not just 0/100)."""
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
             data = src.read(1)
-        mid = data[(data > 0) & (data < 255)]
+        mid = data[(data > 0) & (data < 100)]
         assert len(mid) > 0, "expected transition zone with intermediate values"
 
     def test_custom_crs(
@@ -321,7 +269,7 @@ class TestProcessSynthetic:
         with rasterio.open(str(out_high)) as src:
             high = src.read(1).astype(np.float64)
         # Higher elevation → beam overshoots sooner → higher mean detectability
-        assert high.mean() > low.mean()
+        assert high[high != NODATA].mean() > low[low != NODATA].mean()
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +297,47 @@ class TestProcessClearSky:
             data = src.read(1)
             tags = src.tags()
         assert (data == 0).any()
-        assert ((data > 0) & (data < 255)).any()
+        assert ((data > 0) & (data < 100)).any()
         assert tags["background_source"] == "climatology"
         assert float(tags["background_top_km"]) == CLIMATOLOGY_TOP_KM
         assert float(tags["echo_coverage"]) == 0.0
         assert "background_age_hours" not in tags
+
+
+# ---------------------------------------------------------------------------
+# Integration: input bin size independent of product resolution
+# ---------------------------------------------------------------------------
+
+
+def _layered_echotop(path: Path, rscale: float) -> Path:
+    """250 km of 5 km TOP, with 12 km TOP outside the 10–240 km window."""
+    range_km = (np.arange(int(250_000 / rscale)) + 0.5) * rscale / 1000.0
+    row = np.where((range_km < 10.0) | (range_km >= 240.0), 12000, 5000)
+    return _write_echotop(path, np.tile(row, (360, 1)), rscale=rscale)
+
+
+class TestProcessInputBinSize:
+    """Analysis window and product extent follow the input range coordinate."""
+
+    @pytest.mark.parametrize("rscale", [250.0, 500.0, 1000.0])
+    def test_matches_uniform_reference(self, tmp_path: Path, rscale: float) -> None:
+        """Only 5 km TOP lies within 10–240 km, so the result must equal a
+        uniform 5 km field.  ``samplepoint=0`` picks the ray maximum, so any
+        12 km bin inside the analysis window would show.
+        """
+        ref = _write_echotop(
+            tmp_path / "uniform.h5", np.full((360, 500), 5000, dtype=np.uint16)
+        )
+        src = _layered_echotop(tmp_path / "layered.h5", rscale)
+        for path, out in ((ref, "ref.tif"), (src, "out.tif")):
+            process(path, tmp_path / out, lowest_elevation=0.3, samplepoint=0.0)
+        with (
+            rasterio.open(tmp_path / "ref.tif") as expected,
+            rasterio.open(tmp_path / "out.tif") as actual,
+        ):
+            assert actual.transform == expected.transform
+            assert actual.shape == expected.shape
+            np.testing.assert_array_equal(actual.read(1), expected.read(1))
 
 
 # ---------------------------------------------------------------------------
@@ -396,8 +380,9 @@ class TestProcessRealFileProperties:
         process(REAL_ECHOTOP, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
             data = src.read(1)
-        assert (data > 0).any()
-        assert (data == 255).any()  # some pixels fully overshooting
+        valid = data[data != NODATA]
+        assert (valid > 0).any()
+        assert (valid < 100).any()
 
 
 # ---------------------------------------------------------------------------
@@ -483,8 +468,7 @@ class TestProcessWithState:
             data = src.read(1)
             tags = src.tags()
         # With background blending, should have a transition zone
-        assert (data > 0).any()
-        assert (data < 255).any()
+        assert ((data > 0) & (data < 100)).any()
         assert tags["background_source"] == "state"
         assert float(tags["background_top_km"]) == 5.0
         assert float(tags["background_age_hours"]) == 1.0

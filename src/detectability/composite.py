@@ -5,23 +5,22 @@
 """Composite detectability from multiple radars.
 
 Merges single-radar detectability COGs into a national composite using
-pixel-wise minimum (best detectability wins: 0 = full beam filling,
-255 = total overshooting / nodata).
+pixel-wise minimum of beam overshoot (best detectability wins).
 """
 
 import logging
 from pathlib import Path
 
-import numpy as np
 import rasterio
 from rasterio.merge import merge
 
 from detectability.defaults import COMPOSITE_BOUNDS_EPSG3067, RANGE_RESOLUTION
+from detectability.detection import NODATA
+from detectability.georef import write_detectability_cog
 
 logger = logging.getLogger(__name__)
 
-#: Nodata value for detectability grids (= total overshooting).
-NODATA: int = 255
+__all__ = ["NODATA", "composite_min"]
 
 
 def composite_min(
@@ -35,12 +34,13 @@ def composite_min(
     """Create a composite detectability field from single-radar COGs.
 
     Merges all input rasters onto a fixed national grid using pixel-wise
-    minimum.  Cells not covered by any radar are set to nodata (255).
+    minimum.  Cells not covered by any radar are set to :data:`NODATA`.
 
     Parameters
     ----------
     input_paths
-        Paths to single-radar detectability COGs (uint8, nodata=255).
+        Paths to single-radar detectability COGs (uint8, nodata
+        :data:`NODATA`).
     output_path
         Path for the output composite COG.
     bounds
@@ -72,20 +72,9 @@ def composite_min(
 
     # mosaic shape: (bands, height, width)
     height, width = mosaic.shape[1], mosaic.shape[2]
-
-    profile = {
-        "driver": "COG",
-        "dtype": "uint8",
-        "width": width,
-        "height": height,
-        "count": 1,
-        "crs": crs,
-        "transform": transform,
-        "nodata": NODATA,
-    }
-
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(mosaic[0].astype(np.uint8), 1)
+    write_detectability_cog(
+        output_path, mosaic[0], crs=crs, transform=transform, nodata=NODATA
+    )
 
     logger.info(
         "Wrote composite COG: %s (%d inputs, %dx%d)",

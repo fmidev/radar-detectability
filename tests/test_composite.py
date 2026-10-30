@@ -58,6 +58,8 @@ class TestCompositeMin:
                 result = src.read(1)
                 assert src.nodata == NODATA
                 assert src.crs.to_epsg() == 3067
+                assert src.descriptions == ("beam overshoot",)
+                assert src.units == ("%",)
                 # Centre region should have value 50
                 ny, nx = result.shape
                 assert result[ny // 2, nx // 2] == 50
@@ -65,8 +67,8 @@ class TestCompositeMin:
     def test_min_aggregation_overlapping(self) -> None:
         """Overlapping areas should take the minimum value."""
         bounds = (100000.0, 6600000.0, 110000.0, 6610000.0)
-        # Radar 1: uniform 200
-        data1 = np.full((20, 20), 200, dtype=np.uint8)
+        # Radar 1: uniform 90
+        data1 = np.full((20, 20), 90, dtype=np.uint8)
         # Radar 2: uniform 80
         data2 = np.full((20, 20), 80, dtype=np.uint8)
 
@@ -81,7 +83,7 @@ class TestCompositeMin:
             )
             with rasterio.open(out) as src:
                 result = src.read(1)
-                # All pixels should be min(200, 80) = 80
+                # All pixels should be min(90, 80) = 80
                 valid = result[result != NODATA]
                 assert np.all(valid == 80)
 

@@ -8,8 +8,10 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
+from wradlib.georef import bin_altitude
+
 from detectability.beam import slant_range_from_height
-from detectability.detection import compute_detection_ranges
+from detectability.detection import NODATA, compute_detection_ranges
 
 # Vimpeli radar parameters
 SITEALT = 200.0
@@ -52,7 +54,7 @@ class TestComputeDetectionRanges:
         )
         grid = ds["detectability"].values
         assert grid.min() >= 0
-        assert grid.max() <= 255
+        assert grid.max() <= 100
 
     def test_close_range_is_zero(self) -> None:
         """Bins well within detection range should be 0 (full filling)."""
@@ -66,8 +68,8 @@ class TestComputeDetectionRanges:
         # First bin center is at 250m — should be 0 at all azimuths
         assert_array_equal(ds["detectability"].values[:, 0], 0)
 
-    def test_far_range_is_255(self) -> None:
-        """Bins well beyond detection range should be 255 (total overshooting)."""
+    def test_far_range_is_100(self) -> None:
+        """Bins well beyond detection range should be 100 (total overshooting)."""
         top = np.full(360, 3000.0)  # low TOP → short detection range
         ds = compute_detection_ranges(
             top,
@@ -75,8 +77,8 @@ class TestComputeDetectionRanges:
             beamwidth=BEAMWIDTH,
             sitealt=SITEALT,
         )
-        # Last bin (~250 km) should definitely be 255
-        assert_array_equal(ds["detectability"].values[:, -1], 255)
+        # Last bin (~250 km) should definitely be 100
+        assert_array_equal(ds["detectability"].values[:, -1], 100)
 
     def test_monotonic_increase_along_range(self) -> None:
         """Detectability values should be non-decreasing along range."""
@@ -192,8 +194,8 @@ class TestComputeDetectionRanges:
         assert ds.attrs["beamwidth_deg"] == BEAMWIDTH
         assert ds.attrs["sitealt_m"] == SITEALT
 
-    def test_zero_top_gives_all_255(self) -> None:
-        """Zero TOP means beam always overshoots → all bins should be 255."""
+    def test_top_below_site_gives_all_100(self) -> None:
+        """TOP below the radar site means total overshooting everywhere."""
         top = np.full(360, 0.0)
         ds = compute_detection_ranges(
             top,
@@ -201,37 +203,65 @@ class TestComputeDetectionRanges:
             beamwidth=BEAMWIDTH,
             sitealt=SITEALT,
         )
-        # range_full and range_zero should be 0 (unreachable)
-        # all output bins at or beyond range 0 → 255
-        grid = ds["detectability"].values
-        # At minimum all far bins should be 255 (in practice all bins
-        # since range_full=0 means the transition starts at bin 0)
-        assert grid[:, -1].max() == 255
+        assert_array_equal(ds["detectability"].values, 100)
 
-    def test_cross_check_legacy_encoding(self) -> None:
-        """Verify encoding matches legacy formula for a specific case.
-
-        Legacy:
-          k = 255 / (lowbeam_range_km - highbeam_range_km)
-          outbyte = (B/2.0 - highbeam_range_km) * k  if B > 2*highbeam
-        """
-        top_m = 5000.0
-        top = np.full(1, top_m)
+    def test_nan_top_gives_nodata(self) -> None:
+        top = np.array([5000.0, np.nan])
         ds = compute_detection_ranges(
             top,
             lowest_elevation=LOWEST_ELEV,
             beamwidth=BEAMWIDTH,
             sitealt=SITEALT,
         )
-        rf_m = ds["range_full"].values[0]
-        rz_m = ds["range_zero"].values[0]
-        grid = ds["detectability"].values[0]
+        grid = ds["detectability"].values
+        assert_array_equal(grid[1], NODATA)
+        assert (grid[0] <= 100).all()
 
-        # Check a bin in the transition zone
-        mid_range_m = (rf_m + rz_m) / 2  # halfway
-        mid_bin = int(mid_range_m / 500.0)  # bin index (500m resolution)
-        if 0 <= mid_bin < 500:
-            expected_frac = (mid_range_m - rf_m) / (rz_m - rf_m)
-            expected_byte = int(expected_frac * 255)
-            # Allow ±2 due to bin discretization (bin centre vs edge)
-            assert abs(int(grid[mid_bin]) - expected_byte) <= 2
+    def test_geometric_overshoot_fraction(self) -> None:
+        """Values equal the fraction of the beam above TOP, in percent."""
+        top_m = 5000.0
+        ds = compute_detection_ranges(
+            np.full(1, top_m),
+            lowest_elevation=LOWEST_ELEV,
+            beamwidth=BEAMWIDTH,
+            sitealt=SITEALT,
+        )
+        r = ds["range"].values
+        h_top = bin_altitude(r, LOWEST_ELEV + BEAMWIDTH / 2, SITEALT)
+        h_bot = bin_altitude(r, LOWEST_ELEV - BEAMWIDTH / 2, SITEALT)
+        expected = np.clip((h_top - top_m) / (h_top - h_bot), 0, 1) * 100
+        np.testing.assert_allclose(
+            ds["detectability"].values[0], expected, atol=0.5
+        )
+
+    def test_endpoints_match_detection_ranges(self) -> None:
+        """0 % up to range_full, 100 % beyond range_zero."""
+        ds = compute_detection_ranges(
+            np.full(1, 3000.0),
+            lowest_elevation=LOWEST_ELEV,
+            beamwidth=BEAMWIDTH,
+            sitealt=SITEALT,
+        )
+        r = ds["range"].values
+        grid = ds["detectability"].values[0]
+        assert (grid[r < ds["range_full"].values[0]] == 0).all()
+        assert (grid[r > ds["range_zero"].values[0]] == 100).all()
+
+    def test_not_below_legacy_linear_ramp(self) -> None:
+        """Geometric fraction is ≥ the legacy linear-in-range ramp.
+
+        Legacy: k = 255/(lowbeam - highbeam);
+                outbyte = (B/2.0 - highbeam) * k
+        """
+        ds = compute_detection_ranges(
+            np.full(1, 5000.0),
+            lowest_elevation=LOWEST_ELEV,
+            beamwidth=BEAMWIDTH,
+            sitealt=SITEALT,
+        )
+        r = ds["range"].values
+        rf = ds["range_full"].values[0]
+        rz = ds["range_zero"].values[0]
+        linear = np.clip((r - rf) / (rz - rf), 0, 1) * 100
+        grid = ds["detectability"].values[0]
+        assert (grid >= np.floor(linear)).all()

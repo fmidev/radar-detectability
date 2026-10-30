@@ -30,6 +30,8 @@ dependencies = [
   "xradar>=0.13.0",
   "wradlib",
   "rioxarray",
+  "rasterio",
+  "pyproj",
 ]
 
 [tool.hatch.envs.test]

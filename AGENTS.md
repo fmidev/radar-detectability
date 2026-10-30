@@ -20,11 +20,11 @@ No `setup.py` or `requirements.txt` — all metadata lives in `pyproject.toml`.
 
 ## Airflow Integration
 
-This package is deployed as a containerized service in FMI's Airflow radar production system. You may check the current deployment over ssh at dev.tutka:/airflow/dev/dags/radar_detectability. For changing the deployment, write a handower document describing the changes for an agent running on dev.tutka. 
+This package is deployed as a containerized service in FMI's Airflow radar production system. You may check the current deployment over ssh at dev.tutka:/airflow/dev/dags/radar_detectability. For changing the deployment, write an easy to copy-paste handover document describing the changes for an agent running on dev.tutka.
 
 The integration pattern:
 
-- **Deployment**: Docker container with this package installed (built via [Containerfile](Containerfile), image `quay.io/fmi/radar-detectability:vx.y.z`).
+- **Deployment**: Docker container with this package installed (built via [Containerfile](Containerfile), image `quay.io/fmi/radar_detectability:vx.y.z`).
 - **Airflow tasks**: Use `@task.docker` decorator to invoke Python API
 - **No DAGs in this repo**: Workflow orchestration lives in the separate Airflow radar production repository
 - **Robustness**: Handle missing/corrupted input files and edge cases gracefully, log processing steps

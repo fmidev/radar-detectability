@@ -9,10 +9,12 @@ georeferencing into a single callable entry point.
 """
 
 import logging
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
+import xarray as xr
 
 from detectability.analysis import pick_ray_tops, sector_smooth
 from detectability.defaults import (
@@ -83,7 +85,9 @@ def process(
         Radial range window for ray TOP analysis [km].  Defaults match
         the legacy pipeline (10–240 km).
     range_resolution
-        Range bin size [m] of the product (default 500 m).
+        Range bin size [m] of the polar product grid (default 500 m).
+        Independent of the input bin size; the product extends to the
+        input's maximum range.
     sector_half_width
         Half-width of the azimuthal smoothing sector in rays.  Full
         sector size is ``2 * sector_half_width + 1`` rays.  Default 30
@@ -143,17 +147,20 @@ def process(
     radar_lon = float(ds.coords["longitude"].values)
     radar_lat = float(ds.coords["latitude"].values)
     radar_alt = float(ds.coords["altitude"].values)
-    nbins = ds.sizes["range"]
+    max_range_m = _max_range_m(ds["range"])
+    out_nbins = math.ceil(max_range_m / range_resolution)
 
     # --- Filtering ----------------------------------------------------------
     hght = ds["HGHT"].values  # (nrays, nbins), float64 decoded by xradar
     filtered = azimuthal_filter(hght)
 
     # --- Ray TOP analysis ---------------------------------------------------
-    # Convert km to bin indices: bin_i = range_km * 1000 / range_resolution
-    # Legacy: StartBin = int(minrange * 2.0) for 500 m bins
-    min_bin = int(min_range_km * 1000.0 / range_resolution)
-    max_bin = int(max_range_km * 1000.0 / range_resolution)
+    # Input bins with centres in [min_range, max_range); input bin size
+    # need not match range_resolution.
+    # Legacy assumed 500 m bins: StartBin = int(minrange * 2.0)
+    min_bin, max_bin = np.searchsorted(
+        ds["range"].values, [min_range_km * 1000.0, max_range_km * 1000.0]
+    ).tolist()
 
     ray_top, ray_weight = pick_ray_tops(
         filtered,
@@ -187,7 +194,7 @@ def process(
         beamwidth=beamwidth,
         sitealt=radar_alt,
         range_resolution=range_resolution,
-        nbins=nbins,
+        nbins=out_nbins,
     )
     ds_polar.attrs.update(_provenance_attrs(nominal_time, background, ray_weight))
 
@@ -198,7 +205,7 @@ def process(
         radar_lat=radar_lat,
         radar_alt=radar_alt,
         crs=crs,
-        max_range_m=nbins * range_resolution,
+        max_range_m=max_range_m,
     )
 
     write_cog(da_proj, output_path)
@@ -208,6 +215,15 @@ def process(
         _update_state(state_path, state, nominal_time, ray_top, ray_weight)
 
     logger.info("Done: %s", output_path)
+
+
+def _max_range_m(range_coord: xr.DataArray) -> float:
+    """Far edge [m] of the last bin of an xradar ``range`` coordinate."""
+    centres = range_coord.values
+    gate = range_coord.attrs.get("meters_between_gates")
+    if gate is None:
+        gate = centres[-1] - centres[-2]
+    return float(centres[-1] + float(gate) / 2.0)
 
 
 def _provenance_attrs(
