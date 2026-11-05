@@ -5,7 +5,8 @@
 """Read pre-computed polar echotop products in ODIM HDF5 format.
 
 Uses xradar for reading; h5py is used only to extract metadata
-(nominal time, source, beamwidth) that xradar does not expose.
+(nominal time, source, beamwidth, lowest elevation) that xradar does not
+expose.
 """
 
 import logging
@@ -14,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import h5py
+import numpy as np
 import xarray as xr
 import xradar as xd
 
@@ -43,6 +45,8 @@ def read_echotop(path: str | Path) -> xr.Dataset:
         ``latitude``, ``altitude``) are attached as scalar sweep coordinates.
         If the file's ``/how`` group contains ``beamwH`` / ``beamwV``,
         they are added as ``beamwidth_h`` / ``beamwidth_v`` attrs [deg].
+        The lowest source sweep elevation (min of ``dataset1/how``
+        ``angles``) is added as attr ``lowest_elevation`` [deg], if present.
         The ODIM nominal time (``/what`` ``date`` + ``time``) is added as
         a timezone-aware UTC ``datetime`` attr ``nominal_time``, if present.
         The ODIM ``/what`` ``source`` string is added as attr ``source``
@@ -89,8 +93,8 @@ def _read_odim_attrs(path: Path) -> dict[str, str | float | datetime]:
 
     Returns a dict that may contain ``nominal_time`` (UTC datetime),
     ``source`` / ``radar`` (ODIM source string and its NOD) and
-    ``beamwidth_h`` / ``beamwidth_v`` (degrees).  Missing or malformed
-    attributes are omitted.
+    ``beamwidth_h`` / ``beamwidth_v`` and ``lowest_elevation`` (degrees).
+    Missing or malformed attributes are omitted.
     """
     result: dict[str, str | float | datetime] = {}
     try:
@@ -116,6 +120,13 @@ def _read_odim_attrs(path: Path) -> dict[str, str | float | datetime]:
                     val = how.attrs.get(odim_key)
                     if val is not None:
                         result[our_key] = float(val)
+            # Echo-top products are derived from a volume; the source
+            # sweep elevations are listed in scan order (not sorted).
+            ds1_how = f.get("dataset1/how")
+            if ds1_how is not None:
+                angles = np.atleast_1d(ds1_how.attrs.get("angles", []))
+                if angles.size:
+                    result["lowest_elevation"] = float(np.min(angles))
     except OSError:
         logger.warning("Could not read /what and /how attrs from %s", path)
     return result

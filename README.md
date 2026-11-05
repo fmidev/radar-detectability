@@ -98,15 +98,15 @@ from detectability import composite_min, process
 process(
     "202603191120_fivim_etop_-10_dbzh_polar_qc.h5",
     "fivim_detectability.tif",
-    lowest_elevation=0.3,              # degrees
     state_path="state/fivim.json",     # optional; see above
 )
 
 composite_min(["fivim_detectability.tif", ...], "composite.tif")
 ```
 
-The beamwidth is read from the input file (`/how` `beamwH`) unless given as
-`beamwidth=`. Other tuning parameters and their defaults are documented in
+The beamwidth (`/how` `beamwH`) and the lowest sweep elevation (minimum of
+`dataset1/how` `angles`) are read from the input file unless given as
+`beamwidth=` / `lowest_elevation=`. Other tuning parameters and their defaults are documented in
 [`defaults.py`](src/detectability/defaults.py).
 
 ## Install

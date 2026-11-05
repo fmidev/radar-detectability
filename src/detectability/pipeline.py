@@ -49,7 +49,7 @@ def process(
     input_path: str | Path,
     output_path: str | Path,
     *,
-    lowest_elevation: float,
+    lowest_elevation: float | None = None,
     beamwidth: float | None = None,
     min_range_km: float = MIN_RANGE_KM,
     max_range_km: float = MAX_RANGE_KM,
@@ -77,7 +77,9 @@ def process(
         if it does not exist.
     lowest_elevation
         Elevation angle of the lowest radar sweep used to determine
-        detection ranges [degrees].
+        detection ranges [degrees].  If ``None``, the lowest of the
+        source sweep elevations in the file (``dataset1/how`` ``angles``)
+        is used.
     beamwidth
         Radar 3-dB beamwidth [degrees].  If ``None``, read from the
         file's ``/how`` group (``beamwH``).
@@ -134,6 +136,23 @@ def process(
             )
         beamwidth = float(ds.attrs["beamwidth_h"])
         logger.debug("Using beamwidth_h from file: %.3f°", beamwidth)
+
+    if lowest_elevation is None:
+        if "lowest_elevation" not in ds.attrs:
+            raise ValueError(
+                "lowest_elevation not supplied and not found in file "
+                "dataset1/how (angles). Pass lowest_elevation= explicitly."
+            )
+        lowest_elevation = float(ds.attrs["lowest_elevation"])
+        logger.debug("Using lowest elevation from file: %.2f°", lowest_elevation)
+    elif "lowest_elevation" in ds.attrs and not math.isclose(
+        lowest_elevation, ds.attrs["lowest_elevation"]
+    ):
+        logger.info(
+            "lowest_elevation=%.2f° overrides %.2f° from file",
+            lowest_elevation,
+            ds.attrs["lowest_elevation"],
+        )
 
     nominal_time: datetime | None = ds.attrs.get("nominal_time")
     if nominal_time is None:

@@ -153,6 +153,16 @@ class TestReadEchotopReal:
         assert "PLC:Vimpeli" in ds.attrs["source"]
 
 
+@pytest.mark.parametrize(
+    ("radar", "expected"), [("filuo", 0.1), ("fikor", 0.5), ("fivih", 0.3)]
+)
+def test_lowest_elevation_real(radar: str, expected: float) -> None:
+    """Lowest elevation is the minimum of dataset1/how angles."""
+    path = DATA_DIR / f"202611051710_{radar}_etop_-10_dbzh_polar_qc.h5"
+    ds = read_echotop(path)
+    assert ds.attrs["lowest_elevation"] == pytest.approx(expected)
+
+
 # ---------------------------------------------------------------------------
 # Tests with synthetic ODIM fixture
 # ---------------------------------------------------------------------------
@@ -203,6 +213,28 @@ class TestReadEchotopSynthetic:
         assert "beamwidth_h" not in ds.attrs
         assert "beamwidth_v" not in ds.attrs
         assert ds["HGHT"].shape == (36, 50)
+
+    def test_no_angles_no_lowest_elevation(self, synthetic_echotop: Path) -> None:
+        ds = read_echotop(synthetic_echotop)
+        assert "lowest_elevation" not in ds.attrs
+
+    @pytest.mark.parametrize(
+        ("angles", "expected"),
+        [([0.7, 0.3, 1.5], 0.3), ([0.5], 0.5), (0.4, 0.4), ([], None)],
+    )
+    def test_lowest_elevation_from_angles(
+        self, synthetic_echotop: Path, angles: object, expected: float | None
+    ) -> None:
+        """Minimum of angles (scan order, not sorted); empty means omitted."""
+        with h5py.File(synthetic_echotop, "a") as f:
+            f["dataset1"].create_group("how").attrs["angles"] = np.asarray(
+                angles, dtype=np.float64
+            )
+        ds = read_echotop(synthetic_echotop)
+        if expected is None:
+            assert "lowest_elevation" not in ds.attrs
+        else:
+            assert ds.attrs["lowest_elevation"] == pytest.approx(expected)
 
     def test_nominal_time_from_what(self, synthetic_echotop: Path) -> None:
         ds = read_echotop(synthetic_echotop)

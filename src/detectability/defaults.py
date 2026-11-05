@@ -19,7 +19,6 @@ In Airflow ``@task.docker`` calls, pass these as keyword arguments::
     process_radar(
         input_path="/data/etop.h5",
         output_path="/data/detect.tif",
-        lowest_elevation=0.3,
         state_path="/state/fivim.json",
         climatology_top_km=5.5,
         highpart=0.1,

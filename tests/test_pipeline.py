@@ -29,7 +29,13 @@ REAL_ECHOTOP = DATA_DIR / "202603191120_fivim_etop_-10_dbzh_polar_qc.h5"
 # ---------------------------------------------------------------------------
 
 
-def _write_echotop(path: Path, raw: np.ndarray, *, rscale: float = 500.0) -> Path:
+def _write_echotop(
+    path: Path,
+    raw: np.ndarray,
+    *,
+    rscale: float = 500.0,
+    angles: list[float] | None = None,
+) -> Path:
     """Write a minimal ODIM HDF5 polar echotop (HGHT, gain 1, offset 0)."""
     nrays, nbins = raw.shape
     with h5py.File(path, "w") as f:
@@ -56,6 +62,9 @@ def _write_echotop(path: Path, raw: np.ndarray, *, rscale: float = 500.0) -> Pat
         ds1_what.attrs["starttime"] = np.bytes_("120000")
         ds1_what.attrs["enddate"] = np.bytes_("20260319")
         ds1_what.attrs["endtime"] = np.bytes_("120200")
+
+        if angles is not None:
+            ds1.create_group("how").attrs["angles"] = np.asarray(angles)
 
         ds1_where = ds1.create_group("where")
         ds1_where.attrs["elangle"] = 0.0
@@ -182,6 +191,43 @@ class TestProcessValidation:
             # Should not raise
             process("dummy.h5", out, lowest_elevation=0.3, beamwidth=1.0)
         assert out.exists()
+
+
+class TestLowestElevation:
+    """Lowest elevation: explicit argument, else dataset1/how angles."""
+
+    @staticmethod
+    def _tag(path: Path) -> float:
+        with rasterio.open(str(path)) as src:
+            return float(src.tags()["lowest_elevation_deg"])
+
+    def test_from_file(self, tmp_path: Path) -> None:
+        raw = np.full((360, 500), 5000, dtype=np.uint16)
+        src = _write_echotop(tmp_path / "in.h5", raw, angles=[0.7, 0.1, 1.5])
+        out = tmp_path / "out.tif"
+        process(src, out)
+        assert self._tag(out) == pytest.approx(0.1)
+
+    def test_explicit_overrides_file(self, tmp_path: Path) -> None:
+        raw = np.full((360, 500), 5000, dtype=np.uint16)
+        src = _write_echotop(tmp_path / "in.h5", raw, angles=[0.1, 0.7])
+        out = tmp_path / "out.tif"
+        process(src, out, lowest_elevation=0.5)
+        assert self._tag(out) == pytest.approx(0.5)
+
+    def test_missing_raises(self, synthetic_echotop: Path, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="lowest_elevation"):
+            process(synthetic_echotop, tmp_path / "out.tif")
+
+    def test_missing_explicit_ok(self, synthetic_echotop: Path, tmp_path: Path) -> None:
+        out = tmp_path / "out.tif"
+        process(synthetic_echotop, out, lowest_elevation=0.3)
+        assert self._tag(out) == pytest.approx(0.3)
+
+    def test_real_file(self, tmp_path: Path) -> None:
+        out = tmp_path / "out.tif"
+        process(DATA_DIR / "202611051710_filuo_etop_-10_dbzh_polar_qc.h5", out)
+        assert self._tag(out) == pytest.approx(0.1)
 
 
 # ---------------------------------------------------------------------------
