@@ -34,7 +34,7 @@ def explore_odim_group(f: h5py.File) -> None:
 def explore_datasets(f: h5py.File, max_datasets: int = 30) -> dict:
     """Enumerate dataset groups, print geometry and quantities."""
     datasets = sorted(
-        [k for k in f.keys() if k.startswith("dataset")],
+        [k for k in f if k.startswith("dataset")],
         key=lambda x: int(x.replace("dataset", "")),
     )
     print(f"\n  Total dataset groups: {len(datasets)}")
@@ -70,7 +70,7 @@ def explore_datasets(f: h5py.File, max_datasets: int = 30) -> dict:
                 print(f"    what/{k}: {val}")
 
         # data groups: quantities and statistics
-        data_groups = sorted([k for k in ds.keys() if k.startswith("data")])
+        data_groups = sorted([k for k in ds if k.startswith("data")])
         for dg_name in data_groups:
             dg = ds[dg_name]
             if "what" not in dg:
@@ -129,13 +129,13 @@ def assess_echotop_applicability(f: h5py.File) -> None:
     """Assess whether echotop product is usable as input for detection range analysis."""
     print_header("ECHOTOP APPLICABILITY ASSESSMENT")
 
-    datasets = [k for k in f.keys() if k.startswith("dataset")]
+    datasets = [k for k in f if k.startswith("dataset")]
     if not datasets:
         print("  No datasets found!")
         return
 
     ds = f[datasets[0]]
-    data_groups = [k for k in ds.keys() if k.startswith("data")]
+    data_groups = [k for k in ds if k.startswith("data")]
 
     for dg_name in data_groups:
         dg = ds[dg_name]
@@ -285,9 +285,7 @@ def assess_echotop_applicability(f: h5py.File) -> None:
         print(
             "      - Per-ray TOP sampling (HIGHPART/SAMPLEPOINT) needs polar coordinates"
         )
-        print(
-            "      - Detection range encoding references beam geometry along radials"
-        )
+        print("      - Detection range encoding references beam geometry along radials")
         print("    ")
         print("    Options:")
         print(

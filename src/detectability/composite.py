@@ -9,6 +9,7 @@ pixel-wise minimum of beam overshoot (best detectability wins).
 """
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 import rasterio
@@ -24,7 +25,7 @@ __all__ = ["NODATA", "composite_min"]
 
 
 def composite_min(
-    input_paths: list[str | Path],
+    input_paths: Sequence[str | Path],
     output_path: str | Path,
     *,
     bounds: tuple[float, float, float, float] = COMPOSITE_BOUNDS_EPSG3067,
@@ -103,7 +104,7 @@ def composite_min(
 
 
 def _provenance_tags(
-    input_tags: list[dict[str, str]], input_paths: list[str | Path]
+    input_tags: list[dict[str, str]], input_paths: Sequence[str | Path]
 ) -> dict[str, str | int]:
     """Composite tags derived from the single-radar input tags."""
     radars = []

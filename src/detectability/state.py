@@ -99,20 +99,22 @@ def save_state(path: str | Path, state: BackgroundState) -> None:
         "timestamp": state.timestamp.isoformat(),
     }
     # Write to a temp file in the same directory, then rename (atomic on POSIX)
-    fd = tempfile.NamedTemporaryFile(
-        mode="w",
-        dir=path.parent,
-        prefix=".state_",
-        suffix=".tmp",
-        delete=False,
-        encoding="utf-8",
-    )
+    tmp_path: Path | None = None
     try:
-        json.dump(data, fd)
-        fd.close()
-        Path(fd.name).replace(path)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=path.parent,
+            prefix=".state_",
+            suffix=".tmp",
+            delete=False,
+            encoding="utf-8",
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+            json.dump(data, tmp)
+        tmp_path.replace(path)
     except BaseException:
-        Path(fd.name).unlink(missing_ok=True)
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
         raise
 
 

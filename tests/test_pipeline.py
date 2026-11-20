@@ -181,9 +181,11 @@ class TestProcessValidation:
 
     def test_missing_beamwidth_raises(self, tmp_path: Path) -> None:
         ds_no_bw = self._make_ds_no_beamwidth()
-        with patch("detectability.pipeline.read_echotop", return_value=ds_no_bw):
-            with pytest.raises(ValueError, match="beamwidth"):
-                process("dummy.h5", tmp_path / "out.tif", lowest_elevation=0.3)
+        with (
+            patch("detectability.pipeline.read_echotop", return_value=ds_no_bw),
+            pytest.raises(ValueError, match="beamwidth"),
+        ):
+            process("dummy.h5", tmp_path / "out.tif", lowest_elevation=0.3)
 
     def test_explicit_beamwidth_bypasses_file(self, tmp_path: Path) -> None:
         """Explicit beamwidth= should succeed even if file has none."""
