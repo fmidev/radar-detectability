@@ -2,38 +2,65 @@
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
-[tool.hatch.version]
-source = "vcs"
-
 [project]
-name = "detectability"
+name = "radar-detectability"
 dynamic = ["version"]
-description = 'Radar detectability product'
+description = "Weather radar precipitation detectability (beam overshoot) products from echo-top data"
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
-keywords = []
+license-files = ["LICENSE.txt"]
+keywords = ["weather radar", "detectability", "beam overshoot", "echo top", "meteorology", "ODIM"]
 authors = [
   { name = "Jussi Tiira", email = "jussi.tiira@fmi.fi" },
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
   "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+  "Topic :: Scientific/Engineering :: Atmospheric Science",
+  "Typing :: Typed",
 ]
+# Lower bounds are the oldest versions tested in CI (the first releases with
+# Python 3.14 wheels where applicable).
 dependencies = [
-  "numpy",
-  "scipy",
-  "xarray",
+  "numpy>=2.3.2",
+  "scipy>=1.16.1",
+  "xarray>=2026.4.0",
   "xradar>=0.13.0",
-  "wradlib",
-  "rioxarray",
-  "rasterio",
-  "pyproj",
-  "h5py",
+  "wradlib>=2.5.0",
+  "rioxarray>=0.19.0",
+  "rasterio>=1.4.4",
+  "pyproj>=3.7.2",
+  "h5py>=3.15.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/fmidev/radar-detectability"
+Source = "https://github.com/fmidev/radar-detectability"
+Issues = "https://github.com/fmidev/radar-detectability/issues"
+Changelog = "https://github.com/fmidev/radar-detectability/releases"
+
+[tool.hatch.version]
+source = "vcs"
+
+# The import package name differs from the distribution name.
+[tool.hatch.build.targets.wheel]
+packages = ["src/detectability"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/detectability",
+  "/tests",
+  "/README.md",
+  "/LICENSE.txt",
+]
+# Volume scan used only by src/scripts
+exclude = ["/tests/data/*_volume_*.h5"]
 
 [dependency-groups]
 # Installed by default with `uv sync`.

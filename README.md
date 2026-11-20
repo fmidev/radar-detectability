@@ -1,11 +1,11 @@
-# detectability
+# radar-detectability
 
 Computes radar precipitation detectability fields from polar echo-top (HGHT)
 ODIM HDF5 data. For each azimuth, the output encodes the range interval over
 which the lowest sweep transitions from full beam filling to full beam
 overshoot. Single-radar products can be merged into a national composite.
 
-Python replacement for the legacy C/shell implementation in [`legacy/`](legacy/).
+Python replacement for FMI's legacy C/shell implementation.
 
 ## Algorithm
 
@@ -107,15 +107,16 @@ composite_min(["fivim_detectability.tif", ...], "composite.tif")
 The beamwidth (`/how` `beamwH`) and the lowest sweep elevation (minimum of
 `dataset1/how` `angles`) are read from the input file unless given as
 `beamwidth=` / `lowest_elevation=`. Other tuning parameters and their defaults are documented in
-[`defaults.py`](src/detectability/defaults.py).
+[`defaults.py`](https://github.com/fmidev/radar-detectability/blob/main/src/detectability/defaults.py).
 
 ## Install
 
 ```bash
-pip install .
+pip install radar-detectability
 ```
 
-Requires Python ≥ 3.14.
+Requires Python ≥ 3.14. The distribution is named `radar-detectability`; the
+import package is `detectability`.
 
 ## Development
 
@@ -129,7 +130,7 @@ uv run mypy src/detectability tests     # type check
 
 ## Container
 
-A two-stage [`Containerfile`](Containerfile) builds the image used by Airflow
+A two-stage [`Containerfile`](https://github.com/fmidev/radar-detectability/blob/main/Containerfile) builds the image used by Airflow
 `@task.docker` tasks (published as `quay.io/fmi/radar_detectability:vX.Y.Z`).
 It has no entrypoint:
 
