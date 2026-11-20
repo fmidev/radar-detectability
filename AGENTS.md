@@ -12,11 +12,26 @@ tests/               # pytest tests
 legacy/              # reference C implementation (read-only reference)
 ```
 
-## Build & tooling
+## Setup and checks
 
-Uses **Hatch** as the project manager and build backend (`hatchling` + `hatch-vcs` for version from git tags).
+The environment is managed with [uv](https://docs.astral.sh/uv/) from
+[pyproject.toml](pyproject.toml) and the committed `uv.lock`; the Python version
+comes from [.python-version](.python-version). Run commands from the repository
+root with `uv run`, which creates or syncs `.venv` as needed; do not rely on shell
+activation. Without uv: `python -m pip install -e . --group dev` (pip 25.1+).
+The build backend is `hatchling`, with `hatch-vcs` deriving the version from Git
+tags.
 
-No `setup.py` or `requirements.txt` — all metadata lives in `pyproject.toml`.
+- Run the relevant tests first, e.g. `uv run pytest tests/test_detection.py`.
+  Full suite: `uv run pytest tests/`.
+- Lint and format touched Python files with Ruff (configured in
+  [pyproject.toml](pyproject.toml)): `uv run ruff check --fix <files>` and
+  `uv run ruff format <files>`.
+- Type checking: `uv run mypy src/detectability tests` must stay clean.
+- Add or update dependencies with `uv add` (`uv add --dev` for development
+  tools) so `uv.lock` stays in sync; commit both files.
+- Report checks run and any failures. Documentation-only changes do not require
+  Python tests or builds.
 
 ## Airflow Integration
 
@@ -41,7 +56,8 @@ The integration pattern:
   ```
 
 ### Style
-- Follow Black formatting
+
+- Ruff formatting and lint rules (see above)
 - Naming, comments, etc. in English
 - Mention corresponding legacy names for key variables in comments/docstrings if helpful
 - It's better to briefly quote legacy code than to refer to line numbers
@@ -63,4 +79,5 @@ The legacy C programs (`legacy/src/`) are the authoritative reference for algori
 
 ## Testing
 
-Tests live in `tests/`. Prefer agent hooks to run tests over running them on the command line.
+Tests live in `tests/`, with input fixtures in `tests/data/`. Add regression
+tests in the corresponding test module when behavior changes.

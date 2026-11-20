@@ -119,9 +119,12 @@ Requires Python ≥ 3.14.
 
 ## Development
 
+The development environment is managed with [uv](https://docs.astral.sh/uv/):
+
 ```bash
-hatch run test:run      # pytest
-hatch run types:check   # mypy
+uv run pytest tests/                    # tests
+uv run ruff check && uv run ruff format # lint and format
+uv run mypy src/detectability tests     # type check
 ```
 
 ## Container
