@@ -215,5 +215,11 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# OTHER
+# Other
+*~
+*.swp
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 legacy/
