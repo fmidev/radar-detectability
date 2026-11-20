@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:  # reused by the release workflow
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # hatch-vcs derives the version from Git history
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install (Python from .python-version, locked dependencies)
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check --output-format=github
+      - name: Format
+        run: uv run ruff format --check
+      - name: Type check
+        run: uv run mypy src/detectability tests
+      - name: Test
+        run: uv run pytest tests/
+      - name: Build wheel
+        run: uv build --wheel
+
+  lowest-dependencies:
+    # Verifies the lower bounds of the runtime dependencies in pyproject.toml.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - name: Install the oldest allowed runtime dependencies
+        run: |
+          uv venv
+          uv pip install --resolution lowest-direct .
+          uv pip install pytest
+      - name: Test
+        run: .venv/bin/python -m pytest tests/
