@@ -189,8 +189,7 @@ class TestSectorSmooth:
         top = np.arange(NRAYS, dtype=np.float64) * 10
         weight = np.ones(NRAYS)
         out = sector_smooth(top, weight, sector_half_width=0)
-        # With width=0 the kernel is [1/0] which blows up; skip – use width=1
-        # Actually with inW=0: taper = [(0+1-0)/0] → div/0.  Use width=1 instead.
+        assert_allclose(out, top)
 
     def test_triangle_kernel_symmetry(self) -> None:
         """With uniform weight=1, rays equidistant from centre contribute equally."""

@@ -136,10 +136,12 @@ def sector_smooth(
     nrays = top.shape[0]
     inW = sector_half_width
 
-    # Triangle kernel: values 1/inW … inW/inW … 1/inW (centre = 1.0)
+    # Triangle kernel: values 1 … inW+1 … 1.
     # Legacy: wg = (inW+1) - abs(inW-i); weightarr[i] = wg / inW
+    # The legacy scaling by 1/inW cancels in the normalisation below and is
+    # omitted so that inW = 0 (no smoothing) does not divide by zero.
     i_idx = np.arange(2 * inW + 1)
-    taper = ((inW + 1) - np.abs(inW - i_idx)) / inW  # shape (sector_size,)
+    taper = (inW + 1) - np.abs(inW - i_idx)  # shape (sector_size,)
     Wsecsum = taper.sum()
 
     smoothed = np.zeros(nrays, dtype=np.float64)
