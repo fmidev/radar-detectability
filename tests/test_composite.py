@@ -54,9 +54,7 @@ class TestCompositeMin:
             inp = Path(tmpdir) / "radar1.tif"
             out = Path(tmpdir) / "composite.tif"
             _write_test_cog(inp, data, bounds)
-            composite_min(
-                [inp], out, bounds=bounds, resolution=500.0
-            )
+            composite_min([inp], out, bounds=bounds, resolution=500.0)
             with rasterio.open(out) as src:
                 result = src.read(1)
                 assert src.nodata == NODATA
@@ -81,9 +79,7 @@ class TestCompositeMin:
             out = Path(tmpdir) / "composite.tif"
             _write_test_cog(inp1, data1, bounds)
             _write_test_cog(inp2, data2, bounds)
-            composite_min(
-                [inp1, inp2], out, bounds=bounds, resolution=500.0
-            )
+            composite_min([inp1, inp2], out, bounds=bounds, resolution=500.0)
             with rasterio.open(out) as src:
                 result = src.read(1)
                 # All pixels should be min(90, 80) = 80
@@ -106,9 +102,7 @@ class TestCompositeMin:
             out = Path(tmpdir) / "composite.tif"
             _write_test_cog(inp1, data1, bounds)
             _write_test_cog(inp2, data2, bounds)
-            composite_min(
-                [inp1, inp2], out, bounds=bounds, resolution=500.0
-            )
+            composite_min([inp1, inp2], out, bounds=bounds, resolution=500.0)
             with rasterio.open(out) as src:
                 result = src.read(1)
                 # Left side should have radar1's value (100)
@@ -128,9 +122,7 @@ class TestCompositeMin:
             inp = Path(tmpdir) / "radar1.tif"
             out = Path(tmpdir) / "composite.tif"
             _write_test_cog(inp, data, input_bounds)
-            composite_min(
-                [inp], out, bounds=composite_bounds, resolution=500.0
-            )
+            composite_min([inp], out, bounds=composite_bounds, resolution=500.0)
             with rasterio.open(out) as src:
                 result = src.read(1)
                 # Top-right corner should be nodata
@@ -154,9 +146,7 @@ class TestCompositeMin:
             inp = Path(tmpdir) / "radar1.tif"
             out = Path(tmpdir) / "sub" / "dir" / "composite.tif"
             _write_test_cog(inp, data, bounds)
-            composite_min(
-                [inp], out, bounds=bounds, resolution=500.0
-            )
+            composite_min([inp], out, bounds=bounds, resolution=500.0)
             assert out.exists()
 
     def test_output_dtype_uint8(self) -> None:
@@ -168,9 +158,7 @@ class TestCompositeMin:
             inp = Path(tmpdir) / "radar1.tif"
             out = Path(tmpdir) / "composite.tif"
             _write_test_cog(inp, data, bounds)
-            composite_min(
-                [inp], out, bounds=bounds, resolution=500.0
-            )
+            composite_min([inp], out, bounds=bounds, resolution=500.0)
             with rasterio.open(out) as src:
                 assert src.dtypes[0] == "uint8"
 

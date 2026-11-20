@@ -7,7 +7,6 @@
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
-
 from wradlib.georef import bin_altitude
 
 from detectability.beam import slant_range_from_height
@@ -139,8 +138,12 @@ class TestComputeDetectionRanges:
         expected_zero = slant_range_from_height(
             top_m, LOWEST_ELEV - BEAMWIDTH / 2, SITEALT
         )
-        assert ds["range_full"].values[0] == pytest.approx(float(expected_full), rel=1e-6)
-        assert ds["range_zero"].values[0] == pytest.approx(float(expected_zero), rel=1e-6)
+        assert ds["range_full"].values[0] == pytest.approx(
+            float(expected_full), rel=1e-6
+        )
+        assert ds["range_zero"].values[0] == pytest.approx(
+            float(expected_zero), rel=1e-6
+        )
 
     def test_uniform_across_azimuths_for_uniform_top(self) -> None:
         """Uniform TOP should produce identical detectability for all azimuths."""
@@ -230,9 +233,7 @@ class TestComputeDetectionRanges:
         h_top = bin_altitude(r, LOWEST_ELEV + BEAMWIDTH / 2, SITEALT)
         h_bot = bin_altitude(r, LOWEST_ELEV - BEAMWIDTH / 2, SITEALT)
         expected = np.clip((h_top - top_m) / (h_top - h_bot), 0, 1) * 100
-        np.testing.assert_allclose(
-            ds["detectability"].values[0], expected, atol=0.5
-        )
+        np.testing.assert_allclose(ds["detectability"].values[0], expected, atol=0.5)
 
     def test_endpoints_match_detection_ranges(self) -> None:
         """0 % up to range_full, 100 % beyond range_zero."""

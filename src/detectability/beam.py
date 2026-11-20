@@ -2,8 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Radar beam geometry helpers.
-"""
+"""Radar beam geometry helpers."""
 
 import numpy as np
 import numpy.typing as npt

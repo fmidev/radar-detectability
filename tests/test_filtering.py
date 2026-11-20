@@ -5,7 +5,6 @@
 """Tests for azimuthal spike filter (detectability.filtering)."""
 
 import numpy as np
-import pytest
 from numpy.testing import assert_array_equal
 
 from detectability.filtering import azimuthal_filter
@@ -117,10 +116,10 @@ class TestAzimuthalFilter:
     def test_per_bin_independence(self) -> None:
         """Spike at one range bin does not affect other bins in same ray."""
         arr = np.zeros((8, 6))
-        arr[3, 2] = 5000.0   # only this bin is non-zero in its ray
+        arr[3, 2] = 5000.0  # only this bin is non-zero in its ray
         out = azimuthal_filter(arr)
-        assert out[3, 2] == 0.0       # isolated spike removed
-        assert (out[:, 3] == 0).all() # adjacent bins unaffected
+        assert out[3, 2] == 0.0  # isolated spike removed
+        assert (out[:, 3] == 0).all()  # adjacent bins unaffected
 
     def test_realistic_360_ray_field(self) -> None:
         """Smoke test on a 360×500 field similar to the real echotop product."""

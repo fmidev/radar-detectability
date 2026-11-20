@@ -4,7 +4,6 @@
 
 """Tests for echotop I/O (detectability.io)."""
 
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,6 +21,7 @@ REAL_ECHOTOP = DATA_DIR / "202603191120_fivim_etop_-10_dbzh_polar_qc.h5"
 # ---------------------------------------------------------------------------
 # Synthetic ODIM HDF5 fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def synthetic_echotop(tmp_path: Path) -> Path:
@@ -92,6 +92,7 @@ def synthetic_echotop(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Tests with real echotop file
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(not REAL_ECHOTOP.exists(), reason="real test data not found")
 class TestReadEchotopReal:
@@ -167,6 +168,7 @@ def test_lowest_elevation_real(radar: str, expected: float) -> None:
 # Tests with synthetic ODIM fixture
 # ---------------------------------------------------------------------------
 
+
 class TestReadEchotopSynthetic:
     """Tests using a synthetic ODIM HDF5 fixture."""
 
@@ -205,6 +207,7 @@ class TestReadEchotopSynthetic:
         """File without /how group should still work, just no beamwidth attrs."""
         # Copy and remove /how
         import shutil
+
         no_how = tmp_path / "no_how.h5"
         shutil.copy(synthetic_echotop, no_how)
         with h5py.File(no_how, "a") as f:
@@ -257,9 +260,7 @@ class TestReadEchotopSynthetic:
         assert ds.attrs["source"] == "NOD:fivim,WMO:02975"
         assert ds.attrs["radar"] == "fivim"
 
-    def test_source_without_nod(
-        self, tmp_path: Path, synthetic_echotop: Path
-    ) -> None:
+    def test_source_without_nod(self, tmp_path: Path, synthetic_echotop: Path) -> None:
         import shutil
 
         no_nod = tmp_path / "no_nod.h5"

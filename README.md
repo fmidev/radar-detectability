@@ -98,7 +98,7 @@ from detectability import composite_min, process
 process(
     "202603191120_fivim_etop_-10_dbzh_polar_qc.h5",
     "fivim_detectability.tif",
-    state_path="state/fivim.json",     # optional; see above
+    state_path="state/fivim.json",  # optional; see above
 )
 
 composite_min(["fivim_detectability.tif", ...], "composite.tif")

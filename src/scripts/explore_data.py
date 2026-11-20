@@ -50,8 +50,16 @@ def explore_datasets(f: h5py.File, max_datasets: int = 30) -> dict:
             for k in ("elangle", "nbins", "nrays", "rscale", "rstart", "a1gate"):
                 if k in w.attrs:
                     val = w.attrs[k]
-                    info[k] = float(val) if isinstance(val, (np.floating, float)) else int(val)
-            geom_str = ", ".join(f"{k}={info.get(k)}" for k in ("elangle", "nrays", "nbins", "rscale", "rstart") if k in info)
+                    info[k] = (
+                        float(val)
+                        if isinstance(val, (np.floating, float))
+                        else int(val)
+                    )
+            geom_str = ", ".join(
+                f"{k}={info.get(k)}"
+                for k in ("elangle", "nrays", "nbins", "rscale", "rstart")
+                if k in info
+            )
             print(f"\n  {ds_name}: {geom_str}")
 
         # what
@@ -162,22 +170,32 @@ def assess_echotop_applicability(f: h5py.File) -> None:
         print(f"    Grid shape: {raw.shape} (nrays × nbins)")
         print(f"    Physical unit implied by scaling: gain={gain}, offset={offset}")
         print(f"    Value range: [{phys.min():.2f}, {phys.max():.2f}] (physical)")
-        print(f"    Data coverage: {valid.size}/{raw.size} ({valid.size/raw.size*100:.1f}%)")
+        print(
+            f"    Data coverage: {valid.size}/{raw.size} ({valid.size / raw.size * 100:.1f}%)"
+        )
 
         # Per-ray coverage (fraction of bins with valid TOP)
         ray_valid = mask.sum(axis=1)
         ray_total = raw.shape[1]
         ray_coverage = ray_valid / ray_total
         rays_with_data = (ray_valid > 0).sum()
-        print(f"    Rays with any data: {rays_with_data}/{nrays} ({rays_with_data/nrays*100:.1f}%)")
-        print(f"    Per-ray coverage: min={ray_coverage.min():.3f}, max={ray_coverage.max():.3f}, "
-              f"mean={ray_coverage.mean():.3f}")
+        print(
+            f"    Rays with any data: {rays_with_data}/{nrays} ({rays_with_data / nrays * 100:.1f}%)"
+        )
+        print(
+            f"    Per-ray coverage: min={ray_coverage.min():.3f}, max={ray_coverage.max():.3f}, "
+            f"mean={ray_coverage.mean():.3f}"
+        )
 
         # Check if data looks like TOP height (expecting values in hundreds/thousands of meters)
         if phys.max() > 50:
-            print(f"    ✓ Values look like heights (max={phys.max():.0f}), likely meters or 100s of meters")
+            print(
+                f"    ✓ Values look like heights (max={phys.max():.0f}), likely meters or 100s of meters"
+            )
         else:
-            print(f"    ⚠ Values are small (max={phys.max():.2f}), may be in km or scaled units")
+            print(
+                f"    ⚠ Values are small (max={phys.max():.2f}), may be in km or scaled units"
+            )
 
         # Percentile distribution
         pcts = np.percentile(phys, [10, 25, 50, 75, 90, 95, 99])
@@ -196,7 +214,7 @@ def assess_echotop_applicability(f: h5py.File) -> None:
         rstart = float(where.attrs.get("rstart", 0))
         elangle = where.attrs.get("elangle", None)
 
-        print(f"\n  Geometry (polar, dataset-level):")
+        print("\n  Geometry (polar, dataset-level):")
         print(f"    nrays={nrays}, nbins={nbins}, rscale={rscale}m, rstart={rstart}km")
         print(f"    Max range: {rstart + nbins * rscale / 1000:.1f} km")
         if elangle is not None:
@@ -215,8 +233,10 @@ def assess_echotop_applicability(f: h5py.File) -> None:
             projdef = projdef.decode()
 
         if xsize is not None:
-            print(f"\n  Geometry (root-level, Cartesian product):")
-            print(f"    xsize={xsize}, ysize={ysize}, xscale={xscale}m, yscale={yscale}m")
+            print("\n  Geometry (root-level, Cartesian product):")
+            print(
+                f"    xsize={xsize}, ysize={ysize}, xscale={xscale}m, yscale={yscale}m"
+            )
             if projdef:
                 print(f"    projdef: {projdef}")
             if epsg is not None:
@@ -226,7 +246,9 @@ def assess_echotop_applicability(f: h5py.File) -> None:
             ur_lat = root_where.attrs.get("UR_lat", None)
             ur_lon = root_where.attrs.get("UR_lon", None)
             if ll_lat is not None:
-                print(f"    Bounding box: ({ll_lat:.3f}, {ll_lon:.3f}) to ({ur_lat:.3f}, {ur_lon:.3f})")
+                print(
+                    f"    Bounding box: ({ll_lat:.3f}, {ll_lon:.3f}) to ({ur_lat:.3f}, {ur_lon:.3f})"
+                )
             bbox_native = root_where.attrs.get("BBOX_native", None)
             if bbox_native is not None:
                 print(f"    BBOX_native (projected): {bbox_native}")
@@ -238,35 +260,67 @@ def assess_echotop_applicability(f: h5py.File) -> None:
         if isinstance(product, bytes):
             product = product.decode()
 
-    print(f"\n  ASSESSMENT:")
-    if obj_type in ("COMP", "IMAGE") or (xsize is not None if root_where is not None else False):
-        print(f"    This echotop product is a CARTESIAN (Composite/Image) grid, NOT polar.")
+    print("\n  ASSESSMENT:")
+    if obj_type in ("COMP", "IMAGE") or (
+        xsize is not None if root_where is not None else False
+    ):
+        print(
+            "    This echotop product is a CARTESIAN (Composite/Image) grid, NOT polar."
+        )
         print(f"    Object type: {obj_type}, Product: {product}")
-        print(f"    It has already been projected to EPSG:{int(epsg) if epsg else '?'} at {xscale}×{yscale}m resolution.")
-        print(f"    ")
-        print(f"    For our detection range method, we need polar (azimuth × range) TOP data,")
-        print(f"    because the analysis operates per-ray (per-azimuth) and computes ranges")
-        print(f"    along the beam. A Cartesian echotop product is NOT directly usable because:")
-        print(f"      - The ray/range structure is lost after reprojection")
-        print(f"      - Per-ray TOP sampling (HIGHPART/SAMPLEPOINT) needs polar coordinates")
-        print(f"      - Detection range encoding references beam geometry along radials")
-        print(f"    ")
-        print(f"    Options:")
-        print(f"      a) Compute echotop from volume scans ourselves (steps 3-4), staying in polar coords")
-        print(f"      b) Find/generate polar echotop products (PGM or ODIM polar) upstream")
-        print(f"      c) Reverse-project Cartesian→polar (lossy, not recommended)")
+        print(
+            f"    It has already been projected to EPSG:{int(epsg) if epsg else '?'} at {xscale}×{yscale}m resolution."
+        )
+        print("    ")
+        print(
+            "    For our detection range method, we need polar (azimuth × range) TOP data,"
+        )
+        print(
+            "    because the analysis operates per-ray (per-azimuth) and computes ranges"
+        )
+        print(
+            "    along the beam. A Cartesian echotop product is NOT directly usable because:"
+        )
+        print("      - The ray/range structure is lost after reprojection")
+        print(
+            "      - Per-ray TOP sampling (HIGHPART/SAMPLEPOINT) needs polar coordinates"
+        )
+        print(
+            "      - Detection range encoding references beam geometry along radials"
+        )
+        print("    ")
+        print("    Options:")
+        print(
+            "      a) Compute echotop from volume scans ourselves (steps 3-4), staying in polar coords"
+        )
+        print(
+            "      b) Find/generate polar echotop products (PGM or ODIM polar) upstream"
+        )
+        print("      c) Reverse-project Cartesian→polar (lossy, not recommended)")
     else:
-        print(f"    The echotop product is a 2D polar field (azimuth × range) of echo-top heights.")
-        print(f"    This is exactly the intermediate product that the legacy pipeline computes")
-        print(f"    internally via radial_echotop_h5.c before feeding it to the detection range")
-        print(f"    analysis in analyse_top_for_detection_range.c.")
-        print(f"    → Can potentially be used DIRECTLY as input to the analysis step (step 6),")
-        print(f"      skipping steps 3-4 (volume I/O + echotop computation) when pre-computed")
-        print(f"      echotop products are available.")
-        print(f"    Key checks needed:")
-        print(f"      - Physical units: are values in meters, 100s of meters, or km?")
-        print(f"      - Does the encoding match what analyse_top_for_detection_range.c expects?")
-        print(f"        (legacy encodes TOP as (pixel−1)×100 meters)")
+        print(
+            "    The echotop product is a 2D polar field (azimuth × range) of echo-top heights."
+        )
+        print(
+            "    This is exactly the intermediate product that the legacy pipeline computes"
+        )
+        print(
+            "    internally via radial_echotop_h5.c before feeding it to the detection range"
+        )
+        print("    analysis in analyse_top_for_detection_range.c.")
+        print(
+            "    → Can potentially be used DIRECTLY as input to the analysis step (step 6),"
+        )
+        print(
+            "      skipping steps 3-4 (volume I/O + echotop computation) when pre-computed"
+        )
+        print("      echotop products are available.")
+        print("    Key checks needed:")
+        print("      - Physical units: are values in meters, 100s of meters, or km?")
+        print(
+            "      - Does the encoding match what analyse_top_for_detection_range.c expects?"
+        )
+        print("        (legacy encodes TOP as (pixel−1)×100 meters)")
 
 
 def main() -> None:

@@ -42,8 +42,8 @@ def azimuthal_filter(top: npt.ArrayLike) -> np.ndarray:
     arr = np.where(arr > 0, arr, 0.0)
 
     # Circular neighbours along azimuth axis (axis=0)
-    prev = np.roll(arr, 1, axis=0)   # arr[A-1, B], wraps 0 → N-1
-    nxt = np.roll(arr, -1, axis=0)   # arr[A+1, B], wraps N-1 → 0
+    prev = np.roll(arr, 1, axis=0)  # arr[A-1, B], wraps 0 → N-1
+    nxt = np.roll(arr, -1, axis=0)  # arr[A+1, B], wraps N-1 → 0
 
     # Legacy: if(!(ob | nb) && b) outarr[A][B]=0;
     both_zero = (prev == 0) & (nxt == 0)

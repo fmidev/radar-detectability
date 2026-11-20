@@ -10,7 +10,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose
 
 from detectability.defaults import CLIMATOLOGY_TOP_KM
 from detectability.state import (
@@ -102,7 +101,9 @@ class TestLoadSaveState:
 
 
 class TestAgeBackgroundTop:
-    def _state(self, top_km: float, hours_ago: float) -> tuple[BackgroundState, datetime]:
+    def _state(
+        self, top_km: float, hours_ago: float
+    ) -> tuple[BackgroundState, datetime]:
         now = datetime(2026, 3, 19, 12, 0, 0, tzinfo=UTC)
         ts = now - timedelta(hours=hours_ago)
         return BackgroundState(top_km=top_km, timestamp=ts), now
@@ -256,7 +257,5 @@ class TestComputeNewTop:
         # Default threshold 0.99 → none valid
         assert compute_new_top(ray_top, ray_weight) is None
         # Lower threshold → all valid
-        result = compute_new_top(
-            ray_top, ray_weight, valid_weight_threshold=0.5
-        )
+        result = compute_new_top(ray_top, ray_weight, valid_weight_threshold=0.5)
         assert result == pytest.approx(3.0)

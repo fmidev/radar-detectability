@@ -59,7 +59,8 @@ class TestSlantRangeFromHeight:
         h, h0, e_deg = 5000.0, SITEALT, 0.3
         e_rad = np.radians(e_deg)
         r_legacy_km = (
-            np.cos(e_rad) * ER_km
+            np.cos(e_rad)
+            * ER_km
             * (np.sqrt(np.sin(e_rad) ** 2 + 0.002 * (h - h0) / ER_km) - np.sin(e_rad))
         )
         r_ours = slant_range_from_height(h, e_deg, h0) / 1000  # m → km

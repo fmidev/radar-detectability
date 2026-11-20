@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-import pytest
 import rasterio
 import xarray as xr
 

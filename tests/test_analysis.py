@@ -5,7 +5,6 @@
 """Tests for TOP analysis (detectability.analysis)."""
 
 import numpy as np
-import pytest
 from numpy.testing import assert_allclose
 
 from detectability.analysis import pick_ray_tops, sector_smooth
@@ -99,8 +98,8 @@ class TestPickRayTops:
     def test_outside_range_bins_ignored(self) -> None:
         """Bins outside [min_range_bin, max_range_bin) must not affect result."""
         arr = np.zeros((NRAYS, NBINS))
-        arr[:, 0] = 99999.0             # below min_range_bin
-        arr[:, NBINS - 1] = 99999.0     # at/above max_range_bin
+        arr[:, 0] = 99999.0  # below min_range_bin
+        arr[:, NBINS - 1] = 99999.0  # at/above max_range_bin
         arr[:, MIN_BIN:MAX_BIN] = 5000.0
         top, _ = pick_ray_tops(arr)
         assert_allclose(top, 5000.0)
@@ -287,9 +286,7 @@ class TestSectorSmoothBlending:
         # One ray at centre of a small sector with full weight
         top[180] = 8000.0
         weight[180] = 1.0
-        out = sector_smooth(
-            top, weight, sector_half_width=5, background_top_m=4000.0
-        )
+        out = sector_smooth(top, weight, sector_half_width=5, background_top_m=4000.0)
         # Ray 180: sees itself (wt=1, rayval=8000) + 10 neighbours (wt=0, rayval=4000)
         # Result at 180 should be between 4000 and 8000
         assert out[180] > 4000.0

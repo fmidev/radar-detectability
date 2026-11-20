@@ -163,10 +163,12 @@ class TestProcessValidation:
         """Minimal xradar-like Dataset without beamwidth attrs."""
         nrays, nbins = 360, 500
         return xr.Dataset(
-            {"HGHT": xr.DataArray(
-                np.zeros((nrays, nbins), dtype=np.float64),
-                dims=["azimuth", "range"],
-            )},
+            {
+                "HGHT": xr.DataArray(
+                    np.zeros((nrays, nbins), dtype=np.float64),
+                    dims=["azimuth", "range"],
+                )
+            },
             coords={
                 "longitude": 23.82,
                 "latitude": 63.10,
@@ -238,33 +240,25 @@ class TestLowestElevation:
 class TestProcessSynthetic:
     """Full pipeline with known synthetic input for deterministic verification."""
 
-    def test_output_file_created(
-        self, synthetic_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_output_file_created(self, synthetic_echotop: Path, tmp_path: Path) -> None:
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3)
         assert out.exists()
 
-    def test_output_crs_epsg3067(
-        self, synthetic_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_output_crs_epsg3067(self, synthetic_echotop: Path, tmp_path: Path) -> None:
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
             assert src.crs is not None
             assert src.crs.to_epsg() == 3067
 
-    def test_output_dtype_uint8(
-        self, synthetic_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_output_dtype_uint8(self, synthetic_echotop: Path, tmp_path: Path) -> None:
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
             assert src.dtypes[0] == "uint8"
 
-    def test_output_single_band(
-        self, synthetic_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_output_single_band(self, synthetic_echotop: Path, tmp_path: Path) -> None:
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:
@@ -293,9 +287,7 @@ class TestProcessSynthetic:
         mid = data[(data > 0) & (data < 100)]
         assert len(mid) > 0, "expected transition zone with intermediate values"
 
-    def test_custom_crs(
-        self, synthetic_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_custom_crs(self, synthetic_echotop: Path, tmp_path: Path) -> None:
         """Custom CRS parameter is respected in output."""
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3, crs="EPSG:4326")
@@ -326,9 +318,7 @@ class TestProcessSynthetic:
 class TestProcessClearSky:
     """Pipeline with no echo → detectability from climatological background."""
 
-    def test_output_created(
-        self, clear_sky_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_output_created(self, clear_sky_echotop: Path, tmp_path: Path) -> None:
         out = tmp_path / "out.tif"
         process(clear_sky_echotop, out, lowest_elevation=0.3)
         assert out.exists()
@@ -462,9 +452,7 @@ class TestProcessWithState:
         """First run (no existing state) creates a new state file."""
         out = tmp_path / "out.tif"
         state = tmp_path / "state.json"
-        process(
-            synthetic_echotop, out, lowest_elevation=0.3, state_path=state
-        )
+        process(synthetic_echotop, out, lowest_elevation=0.3, state_path=state)
         assert state.exists()
 
     def test_state_contains_valid_json(
@@ -491,12 +479,8 @@ class TestProcessWithState:
         state = tmp_path / "state.json"
         out1 = tmp_path / "out1.tif"
         out2 = tmp_path / "out2.tif"
-        process(
-            synthetic_echotop, out1, lowest_elevation=0.3, state_path=state
-        )
-        process(
-            synthetic_echotop, out2, lowest_elevation=0.3, state_path=state
-        )
+        process(synthetic_echotop, out1, lowest_elevation=0.3, state_path=state)
+        process(synthetic_echotop, out2, lowest_elevation=0.3, state_path=state)
         assert out2.exists()
 
     def test_clear_sky_does_not_update_state(
@@ -524,9 +508,7 @@ class TestProcessWithState:
             encoding="utf-8",
         )
         out = tmp_path / "out.tif"
-        process(
-            clear_sky_echotop, out, lowest_elevation=0.3, state_path=state
-        )
+        process(clear_sky_echotop, out, lowest_elevation=0.3, state_path=state)
         with rasterio.open(str(out)) as src:
             data = src.read(1)
             tags = src.tags()
@@ -602,9 +584,7 @@ class TestProcessWithState:
         )
         assert json.loads(state.read_text(encoding="utf-8"))["top_km"] == 5.0
 
-    def test_provenance_tags(
-        self, synthetic_echotop: Path, tmp_path: Path
-    ) -> None:
+    def test_provenance_tags(self, synthetic_echotop: Path, tmp_path: Path) -> None:
         out = tmp_path / "out.tif"
         process(synthetic_echotop, out, lowest_elevation=0.3)
         with rasterio.open(str(out)) as src:

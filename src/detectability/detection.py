@@ -87,16 +87,12 @@ def compute_detection_ranges(
     # Slant range at which the beam *top* edge (elev + half_bw) reaches TOP.
     # Within this range the beam is fully filled.
     # Legacy: maxR_analyzed_highbeam = bindist(TOP*1000, lowest_elev+half_bw, 0)
-    range_full = slant_range_from_height(
-        top, lowest_elevation + half_bw, sitealt
-    )
+    range_full = slant_range_from_height(top, lowest_elevation + half_bw, sitealt)
 
     # Slant range at which the beam *bottom* edge (elev - half_bw) reaches TOP.
     # Beyond this range the beam completely overshoots.
     # Legacy: maxR_analyzed_lowbeam = bindist(TOP*1000, lowest_elev-half_bw, 0)
-    range_zero = slant_range_from_height(
-        top, lowest_elevation - half_bw, sitealt
-    )
+    range_zero = slant_range_from_height(top, lowest_elevation - half_bw, sitealt)
 
     range_m = (np.arange(nbins) + 0.5) * range_resolution  # bin centres
 
