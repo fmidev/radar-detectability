@@ -128,6 +128,9 @@ uv run ruff check && uv run ruff format # lint and format
 uv run mypy src/detectability tests     # type check
 ```
 
+Releases are published from Git tags; see the
+[release guide](https://github.com/fmidev/radar-detectability/blob/main/docs/releasing.md).
+
 ## Container
 
 A two-stage [`Containerfile`](https://github.com/fmidev/radar-detectability/blob/main/Containerfile) builds the image used by Airflow

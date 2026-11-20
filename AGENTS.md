@@ -8,9 +8,14 @@ Python package for computing radar detectability (beam overshooting/filling) pro
 
 ```
 src/detectability/   # main package (src layout)
+src/scripts/         # data exploration scripts (not packaged)
 tests/               # pytest tests
-legacy/              # reference C implementation (read-only reference)
+docs/                # release guide
+legacy/              # reference C implementation (read-only reference, gitignored)
 ```
+
+The PyPI distribution is `radar-detectability` (`detectability` is taken on
+PyPI); the import package is `detectability`.
 
 ## Setup and checks
 
@@ -28,8 +33,18 @@ tags.
   [pyproject.toml](pyproject.toml)): `uv run ruff check --fix <files>` and
   `uv run ruff format <files>`.
 - Type checking: `uv run mypy src/detectability tests` must stay clean.
+- [CI](.github/workflows/ci.yml) runs Ruff, mypy, the full test suite and a
+  wheel build on the whole tree, and repeats the tests with the oldest runtime
+  dependency versions allowed by `pyproject.toml`.
+- Wheel build, for packaging changes: `uv build`.
+  [Containerfile](Containerfile) defines the reproducible production image:
+  base images are pinned by digest and dependencies come from `uv.lock`.
 - Add or update dependencies with `uv add` (`uv add --dev` for development
-  tools) so `uv.lock` stays in sync; commit both files.
+  tools) so `uv.lock` stays in sync; commit both files. Give runtime
+  dependencies a lower bound that passes the oldest-dependency CI job.
+- Releases are Git tags; the version comes from hatch-vcs, never from the
+  source. Follow the [release guide](docs/releasing.md); do not tag or publish
+  unless asked.
 - Report checks run and any failures. Documentation-only changes do not require
   Python tests or builds.
 
