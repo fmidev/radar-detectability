@@ -132,7 +132,9 @@ uv run mypy src/detectability tests     # type check
 
 A two-stage [`Containerfile`](https://github.com/fmidev/radar-detectability/blob/main/Containerfile) builds the image used by Airflow
 `@task.docker` tasks (published as `quay.io/fmi/radar_detectability:vX.Y.Z`).
-It has no entrypoint:
+Builds are reproducible: base images are pinned by digest and Python
+dependencies come from `uv.lock`. The image has no entrypoint; the default
+command prints the installed version:
 
 ```bash
 podman build -t detectability .

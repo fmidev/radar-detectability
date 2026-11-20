@@ -1,8 +1,18 @@
-__pycache__
-*.pyc
-*.egg-info
-.pytest_cache
-.mypy_cache
-legacy
-tests
+# Only pyproject.toml, uv.lock, README.md, LICENSE.txt, src/ and .git/ (for
+# hatch-vcs) are copied into the image; keep the build context small.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.vscode/
+legacy/
+local/
+tests/
 *.tif
