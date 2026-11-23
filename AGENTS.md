@@ -92,7 +92,16 @@ Key concepts (from legacy docs):
 
 The legacy C programs (`legacy/src/`) are the authoritative reference for algorithms. When implementing Python equivalents, cross-check against them for numerical consistency.
 
+`legacy/` is gitignored, so a fresh clone does not have it. **Do not modify
+anything in it.** If a change needs the legacy source to resolve algorithm
+intent and it is missing, ask for it rather than guess. Reproduce the legacy
+algorithm's meaningful behavior, not its accidents: where legacy behavior is a
+bug, implement what is physically meaningful, explain the deviation in a
+comment and cover it with a test.
+
 ## Testing
 
-Tests live in `tests/`, with input fixtures in `tests/data/`. Add regression
-tests in the corresponding test module when behavior changes.
+Tests live in `tests/`, with input fixtures in `tests/data/`; see the
+[test guide](tests/README.md). Add regression tests in the corresponding test
+module when behavior changes. Tests must not depend on `legacy/`.
+Do not relax tolerances or rewrite expected values merely to make a change pass.
