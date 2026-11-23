@@ -16,6 +16,7 @@ import rasterio
 import xarray as xr
 
 import detectability
+from detectability import __version__
 from detectability.defaults import CLIMATOLOGY_TOP_KM
 from detectability.detection import NODATA
 from detectability.pipeline import process
@@ -595,6 +596,7 @@ class TestProcessWithState:
         assert tags["background_source"] == "climatology"
         assert float(tags["echo_coverage"]) == pytest.approx(1.0)
         assert float(tags["valid_ray_fraction"]) == pytest.approx(1.0)
+        assert tags["TIFFTAG_SOFTWARE"] == f"radar-detectability {__version__}"
 
     def test_without_state_path_no_state_file(
         self, synthetic_echotop: Path, tmp_path: Path
@@ -604,3 +606,9 @@ class TestProcessWithState:
         process(synthetic_echotop, out, lowest_elevation=0.3)
         # No JSON files created in tmp_path
         assert list(tmp_path.glob("*.json")) == []
+
+
+def test_version_matches_distribution_metadata() -> None:
+    from importlib.metadata import version
+
+    assert __version__ == version("radar-detectability")

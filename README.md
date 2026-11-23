@@ -84,6 +84,11 @@ Single-radar GeoTIFFs carry provenance tags:
 
 A low `echo_coverage` means the product relies mostly on the background TOP.
 
+Both single-radar and composite GeoTIFFs record the producing version in the
+standard TIFF `Software` tag (`TIFFTAG_SOFTWARE`, e.g.
+`radar-detectability 0.9.0`). In Python, the version is
+`detectability.__version__`.
+
 ### Composite
 
 `composite_min` merges single-radar products onto a fixed grid (default: the

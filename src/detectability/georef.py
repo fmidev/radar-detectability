@@ -21,6 +21,7 @@ from rasterio.transform import Affine
 from scipy.interpolate import NearestNDInterpolator
 from wradlib.georef import spherical_to_proj
 
+from detectability._version import DISTRIBUTION, __version__
 from detectability.detection import BAND_DESCRIPTION, BAND_UNIT, NODATA
 
 logger = logging.getLogger(__name__)
@@ -186,7 +187,8 @@ def write_detectability_cog(
     nodata
         Nodata value, or ``None`` for none.
     tags
-        Dataset-level GeoTIFF tags.
+        Dataset-level GeoTIFF tags.  The producing package and version are
+        always written to the standard TIFF ``Software`` tag.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,5 +208,6 @@ def write_detectability_cog(
         dst.write(data.astype(np.uint8), 1)
         dst.set_band_description(1, BAND_DESCRIPTION)
         dst.set_band_unit(1, BAND_UNIT)
-        if tags:
-            dst.update_tags(**tags)
+        dst.update_tags(
+            **{**(tags or {}), "TIFFTAG_SOFTWARE": f"{DISTRIBUTION} {__version__}"}
+        )

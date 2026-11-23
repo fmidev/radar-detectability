@@ -12,6 +12,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_bounds
 
+from detectability import __version__
 from detectability.composite import NODATA, composite_min
 
 
@@ -195,6 +196,7 @@ class TestCompositeProvenance:
         assert tags["n_radars"] == "2"
         assert tags["nominal_time"] == self.NOMINAL_TIME
         assert tags["composite_method"] == "min"
+        assert tags["TIFFTAG_SOFTWARE"] == f"radar-detectability {__version__}"
 
     def test_missing_radar_tag_excluded(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
