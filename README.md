@@ -130,7 +130,7 @@ The development environment is managed with [uv](https://docs.astral.sh/uv/):
 ```bash
 uv run pytest tests/                    # tests
 uv run ruff check && uv run ruff format # lint and format
-uv run mypy src/detectability tests     # type check
+uv run mypy                             # type check
 ```
 
 Releases are published from Git tags; see the

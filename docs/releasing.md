@@ -39,9 +39,10 @@ tokens are stored in GitHub.
    ```sh
    podman build --pull=newer -t radar-detectability .
    ```
+
 4. Optionally do a dry run: start the Release workflow manually from the
    Actions tab. It publishes the current commit to TestPyPI as a dev version
-   such as `0.9.0.dev3`; check the
+   of the next patch release, such as `0.8.1.dev13`; check the
    [TestPyPI page](https://test.pypi.org/project/radar-detectability/).
 5. Tag and push:
 
