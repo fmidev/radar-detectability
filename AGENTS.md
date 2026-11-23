@@ -37,8 +37,9 @@ tags.
   wheel build on the whole tree, and repeats the tests with the oldest runtime
   dependency versions allowed by `pyproject.toml`.
 - Wheel build, for packaging changes: `uv build`.
-  [Containerfile](Containerfile) defines the reproducible production image:
-  base images are pinned by digest and dependencies come from `uv.lock`.
+  [Containerfile](Containerfile) defines the production image: dependencies
+  come from `uv.lock`, and the base image tag fixes the Python minor version
+  and Debian release.
 - Add or update dependencies with `uv add` (`uv add --dev` for development
   tools) so `uv.lock` stays in sync; commit both files. Give runtime
   dependencies a lower bound that passes the oldest-dependency CI job.

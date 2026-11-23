@@ -140,8 +140,7 @@ Releases are published from Git tags; see the
 
 A two-stage [`Containerfile`](https://github.com/fmidev/radar-detectability/blob/main/Containerfile) builds the image used by Airflow
 `@task.docker` tasks (published as `quay.io/fmi/radar_detectability:vX.Y.Z`).
-Builds are reproducible: base images are pinned by digest and Python
-dependencies come from `uv.lock`. The image has no entrypoint; the default
+Python dependencies are installed from `uv.lock`. The image has no entrypoint; the default
 command prints the installed version:
 
 ```bash
