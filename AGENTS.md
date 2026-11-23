@@ -32,7 +32,8 @@ tags.
 - Lint and format touched Python files with Ruff (configured in
   [pyproject.toml](pyproject.toml)): `uv run ruff check --fix <files>` and
   `uv run ruff format <files>`.
-- Type checking: `uv run mypy src/detectability tests` must stay clean.
+- Type checking: `uv run mypy` must stay clean (paths and
+  strictness are configured in [pyproject.toml](pyproject.toml)).
 - [CI](.github/workflows/ci.yml) runs Ruff, mypy, the full test suite and a
   wheel build on the whole tree, and repeats the tests with the oldest runtime
   dependency versions allowed by `pyproject.toml`.

@@ -83,6 +83,15 @@ build-constraint-dependencies = [
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM"]
 
+[tool.mypy]
+files = ["src/detectability", "tests"]
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The package ships py.typed, so its public annotations must be complete.
+module = ["detectability.*"]
+disallow_untyped_defs = true
+
 # Dependencies without type information
 [[tool.mypy.overrides]]
 module = ["h5py", "rasterio.*", "wradlib.*", "xradar"]
